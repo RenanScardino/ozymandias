@@ -1,9 +1,0 @@
-pandas
-openpyxl
-requests
-pysocks
-beautifulsoup4
-termcolor
-streamlit
-plotly
-watchdog
