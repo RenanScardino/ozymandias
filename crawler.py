@@ -9,6 +9,7 @@ import time
 import sys
 import urllib.parse
 import os
+import random
 
 # --- CONFIGURAÇÃO ---
 SEARCH_ENGINES = {
@@ -26,6 +27,38 @@ SEARCH_ENGINES = {
     },
     'OnionLand': {
         'url': 'http://3bbad7fauom4d6sgppalyqddsqbf5u5p56b5k5uk2zxsy3d6ey2jobad.onion/search?q={query}',
+        'selector': 'generic'
+    },
+    'TorDex': {
+        'url': 'http://tordexu73joywapk2txdr54jed4imqledpcvcuf75qsas2gwdgksvnyd.onion/search?q={query}',
+        'selector': 'generic'
+    },
+    'DarknetSearch': {
+        'url': 'http://darkent74yfc3qe7vhd2ms53ynr3l5hbjz4on2x76e7odjiyrjlirvid.onion/search?q={query}',
+        'selector': 'generic'
+    },
+    'Tor66': {
+        'url': 'http://tor66sewebgixwhcqfnp5inzp5x5uohhdy3kvtnyfxc2e5mxiuh34iid.onion/search?q={query}',
+        'selector': 'generic'
+    },
+    'OnionRealm': {
+        'url': 'http://orealmvxooetglfeguv2vp65a3rig2baq2ljc7jxxs4hsqsrcemkxcad.onion/search?query={query}&action=search',
+        'selector': 'generic'
+    },
+    'Excavator': {
+        'url': 'http://2fd6cemt4gmccflhm6imvdfvli3nf7zn6rfrwpsy7uhxrgbypvwf5fad.onion/search?query={query}',
+        'selector': 'generic'
+    },
+    'TthSearch': {
+        'url': 'http://tth4he7kdfmfwq2k7yaj2ggjdva7rdpbch42q6xgoorbabjeklyfbmyd.onion/search?query={query}',
+        'selector': 'generic'
+    },
+    'Labyrinth': {
+        'url': 'http://labyrinthkh3uokhu2a5nwi4e6kedmbkxar3w6vgm2ipdb7ms3zdzlad.onion/search?query={query}&lang=english&sort-by=relevant&tab=all',
+        'selector': 'generic'
+    },
+    'DeepSearch': {
+        'url': 'http://dgwq7uzh5ro2f7p34begy4kmxue5gst7lk2spxda63zkrpuegtj4opyd.onion/search.php?q={query}',
         'selector': 'generic'
     }
 }
@@ -94,55 +127,103 @@ def parse_generic(soup, term):
             })
     return results
 
+def find_next_page(soup, current_url):
+    """Tenta encontrar o link para a próxima página de resultados."""
+    # 1. Tentar encontrar link com rel="next"
+    link = soup.find('link', rel='next')
+    if link and link.get('href'):
+        return link.get('href')
+    
+    # 2. Procurar por textos comuns de paginação
+    next_texts = ['next', 'next >', '>>', 'more', 'older', 'following', 'próxima', 'proxima']
+    
+    for a in soup.find_all('a', href=True):
+        text = a.get_text(strip=True).lower()
+        if text in next_texts:
+            return a['href']
+            
+    return None
+
 def search_engine(name, engine_config, term, proxies):
-    """Realiza a busca em um motor específico."""
+    """Realiza a busca em um motor específico com paginação automática."""
     results = []
-    url_template = engine_config['url']
-    query_url = url_template.format(query=urllib.parse.quote_plus(term))
+    
+    # URL Inicial
+    current_url = engine_config['url'].format(query=urllib.parse.quote_plus(term))
+    
+    # Limite de segurança para evitar loops infinitos
+    MAX_PAGES = 3 
+    pages_crawled = 0
     
     print(f"  > Pesquisando '{term}' no {name}...")
     
-    try:
-        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; rv:91.0) Gecko/20100101 Firefox/91.0'}
-        # Timeout longo para .onion
-        resp = requests.get(query_url, headers=headers, proxies=proxies, timeout=60)
-        
-        if resp.status_code == 200:
-            soup = BeautifulSoup(resp.text, 'html.parser')
+    while current_url and pages_crawled < MAX_PAGES:
+        if pages_crawled > 0:
+            print(f"    >> Buscando página {pages_crawled + 1}...")
             
-            if engine_config['selector'] == 'li.result':
-                # Parser específico do Ahmia
-                items = soup.select('li.result')
-                for item in items:
-                    link_tag = item.find('a')
-                    snippet_tag = item.find('p')
-                    if link_tag:
-                        results.append({
-                            'Termo Pesquisado': term,
-                            'Motor de Busca': name,
-                            'Título': link_tag.get_text(strip=True),
-                            'URL': link_tag.get('href'),
-                            'Snippet': snippet_tag.get_text(strip=True) if snippet_tag else "",
-                            'Data': pd.Timestamp.now()
-                        })
-            else:
-                # Parser Genérico
-                generic_results = parse_generic(soup, term)
-                # Adiciona o nome do motor
-                for res in generic_results:
-                    res['Motor de Busca'] = name
-                results.extend(generic_results)
+        try:
+            headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; rv:91.0) Gecko/20100101 Firefox/91.0'}
+            # Timeout longo para .onion
+            resp = requests.get(current_url, headers=headers, proxies=proxies, timeout=60)
+            
+            if resp.status_code == 200:
+                soup = BeautifulSoup(resp.text, 'html.parser')
                 
-            print(colored(f"    -> {len(results)} resultados encontrados.", "cyan"))
-        else:
-            print(colored(f"    [X] {name} retornou status {resp.status_code}", "red"))
-            
-    except requests.exceptions.Timeout:
-        print(colored(f"    [X] Timeout ao conectar com {name}", "red"))
-    except requests.exceptions.ConnectionError:
-        print(colored(f"    [X] Falha de conexão com {name} (Pode estar offline)", "red"))
-    except Exception as e:
-        print(colored(f"    [X] Erro inesperado no {name}: {e}", "red"))
+                page_results = []
+                
+                if engine_config['selector'] == 'li.result':
+                    # Parser específico do Ahmia
+                    items = soup.select('li.result')
+                    for item in items:
+                        link_tag = item.find('a')
+                        snippet_tag = item.find('p')
+                        if link_tag:
+                            page_results.append({
+                                'Termo Pesquisado': term,
+                                'Motor de Busca': name,
+                                'Título': link_tag.get_text(strip=True),
+                                'URL': link_tag.get('href'),
+                                'Snippet': snippet_tag.get_text(strip=True) if snippet_tag else "",
+                                'Data': pd.Timestamp.now()
+                            })
+                else:
+                    # Parser Genérico
+                    generic_results = parse_generic(soup, term)
+                    # Adiciona o nome do motor
+                    for res in generic_results:
+                        res['Motor de Busca'] = name
+                    page_results.extend(generic_results)
+                    
+                results.extend(page_results)
+                print(colored(f"    -> {len(page_results)} resultados nesta página.", "cyan"))
+                
+                # Tenta encontrar a próxima página
+                next_link = find_next_page(soup, current_url)
+                if next_link:
+                    # Resolve URL relativa se necessário
+                    current_url = urllib.parse.urljoin(current_url, next_link)
+                    pages_crawled += 1
+                    
+                    # Pausa aleatória para simular humano e dar tempo de carregar/estabilizar Tor
+                    wait_time = random.uniform(5, 10)
+                    print(colored(f"    ... Aguardando {wait_time:.1f}s para próxima página ...", "yellow"))
+                    time.sleep(wait_time)
+                else:
+                    break # Sem mais páginas
+                    
+            else:
+                print(colored(f"    [X] {name} retornou status {resp.status_code}", "red"))
+                break
+                
+        except requests.exceptions.Timeout:
+            print(colored(f"    [X] Timeout ao conectar com {name}", "red"))
+            break
+        except requests.exceptions.ConnectionError:
+            print(colored(f"    [X] Falha de conexão com {name} (Pode estar offline)", "red"))
+            break
+        except Exception as e:
+            print(colored(f"    [X] Erro inesperado no {name}: {e}", "red"))
+            break
         
     return results
 
@@ -192,8 +273,8 @@ def main():
         for engine_name, config in SEARCH_ENGINES.items():
             findings = search_engine(engine_name, config, str(term), proxies)
             all_findings.extend(findings)
-            # Pausa para não sobrecarregar circuitos
-            time.sleep(2) 
+            # Pausa para não sobrecarregar circuitos e evitar bloqueios
+            time.sleep(random.uniform(2, 5)) 
 
     # 4. Relatório
     if all_findings:
