@@ -9,6 +9,7 @@ import sys
 import urllib.parse
 import os
 import random
+import re
 
 # --- CONFIGURAÇÃO ---
 SEARCH_ENGINES = {
@@ -62,6 +63,55 @@ SEARCH_ENGINES = {
     }
 }
 
+USER_AGENTS = [
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:119.0) Gecko/20100101 Firefox/119.0',
+    'Mozilla/5.0 (X11; Linux x86_64; rv:118.0) Gecko/20100101 Firefox/118.0',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:102.0) Gecko/20100101 Firefox/102.0'
+]
+ENRICH_FETCH_LIMIT = 15
+
+def get_headers():
+    ua = random.choice(USER_AGENTS)
+    return {
+        'User-Agent': ua,
+        'Accept-Language': 'en-US,en;q=0.8,pt-BR;q=0.7',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+    }
+
+def normalize_onion_url(href, base_url):
+    if not href:
+        return None
+    if href.startswith('//'):
+        href = 'http:' + href
+    abs_url = urllib.parse.urljoin(base_url, href)
+    parsed = urllib.parse.urlparse(abs_url)
+    if '.onion' in abs_url and not parsed.scheme:
+        abs_url = 'http://' + abs_url
+    return abs_url
+
+def fetch_url(url, proxies, timeout=60, retries=2):
+    attempt = 0
+    while attempt <= retries:
+        try:
+            headers = get_headers()
+            resp = requests.get(url, headers=headers, proxies=proxies, timeout=timeout)
+            if resp.status_code == 200:
+                return resp
+            if resp.status_code in (429, 503):
+                delay = random.uniform(3, 7) * (attempt + 1)
+                time.sleep(delay)
+            else:
+                return None
+        except requests.exceptions.Timeout:
+            delay = random.uniform(2, 4) * (attempt + 1)
+            time.sleep(delay)
+        except requests.exceptions.ConnectionError:
+            delay = random.uniform(2, 4) * (attempt + 1)
+            time.sleep(delay)
+        attempt += 1
+    return None
 def get_tor_port():
     """Detecta automaticamente a porta do Tor (9150 ou 9050)."""
     ports = [9150, 9050]
@@ -95,21 +145,22 @@ def check_tor_connection(proxies):
         return False
     return False
 
-def parse_generic(soup, term):
+def parse_generic(soup, term, base_url):
     """Tenta extrair resultados de qualquer buscador simples."""
     results = []
     # Procura todos os links
     links = soup.find_all('a')
     for link in links:
         href = link.get('href')
-        if href and '.onion' in href:
+        resolved = normalize_onion_url(href, base_url) if href else None
+        if resolved and '.onion' in resolved:
             # Filtra links internos ou irrelevantes
-            if 'search' in href or '?' in href and len(href) < 20:
+            if 'search' in resolved or '?' in resolved and len(resolved) < 20:
                 continue
                 
             title = link.get_text(strip=True)
             if not title:
-                title = href
+                title = resolved
                 
             # Snippet simples (texto ao redor ou pai)
             snippet = ""
@@ -120,7 +171,7 @@ def parse_generic(soup, term):
             results.append({
                 'Termo Pesquisado': term,
                 'Título': title,
-                'URL': href,
+                'URL': resolved,
                 'Snippet': snippet,
                 'Data': pd.Timestamp.now()
             })
@@ -128,12 +179,10 @@ def parse_generic(soup, term):
 
 def find_next_page(soup, current_url):
     """Tenta encontrar o link para a próxima página de resultados."""
-    # 1. Tentar encontrar link com rel="next"
     link = soup.find('link', rel='next')
     if link and link.get('href'):
         return link.get('href')
     
-    # 2. Procurar por textos comuns de paginação
     next_texts = ['next', 'next >', '>>', 'more', 'older', 'following', 'próxima', 'proxima']
     
     for a in soup.find_all('a', href=True):
@@ -141,6 +190,53 @@ def find_next_page(soup, current_url):
         if text in next_texts:
             return a['href']
             
+    def _extract_current_page(url, soup_obj):
+        parsed = urllib.parse.urlparse(url)
+        qs = urllib.parse.parse_qs(parsed.query)
+        for key in ['page', 'p', 'pg']:
+            if key in qs:
+                try:
+                    return int(qs[key][0])
+                except:
+                    pass
+        indicators = ['active', 'current', 'selected', 'page-current']
+        for cls in indicators:
+            el = soup_obj.find(class_=cls)
+            if el:
+                t = el.get_text(strip=True)
+                if t.isdigit():
+                    try:
+                        return int(t)
+                    except:
+                        pass
+        return None
+    
+    numeric_candidates = []
+    for a in soup.find_all('a', href=True):
+        t = a.get_text(strip=True)
+        if not t:
+            continue
+        m = re.fullmatch(r'\d+', t)
+        if m:
+            try:
+                n = int(t)
+                numeric_candidates.append((n, a['href']))
+            except:
+                pass
+    
+    if numeric_candidates:
+        current_page = _extract_current_page(current_url, soup)
+        numeric_candidates.sort(key=lambda x: x[0])
+        if current_page is not None:
+            for n, href in numeric_candidates:
+                if n > current_page:
+                    return href
+        else:
+            for n, href in numeric_candidates:
+                if n > 1:
+                    return href
+            return numeric_candidates[0][1]
+    
     return None
 
 def search_engine(name, engine_config, term, proxies):
@@ -161,11 +257,9 @@ def search_engine(name, engine_config, term, proxies):
             print(f"    >> Buscando página {pages_crawled + 1}...")
             
         try:
-            headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; rv:91.0) Gecko/20100101 Firefox/91.0'}
-            # Timeout longo para .onion
-            resp = requests.get(current_url, headers=headers, proxies=proxies, timeout=60)
+            resp = fetch_url(current_url, proxies, timeout=60, retries=2)
             
-            if resp.status_code == 200:
+            if resp and resp.status_code == 200:
                 soup = BeautifulSoup(resp.text, 'html.parser')
                 
                 page_results = []
@@ -177,17 +271,18 @@ def search_engine(name, engine_config, term, proxies):
                         link_tag = item.find('a')
                         snippet_tag = item.find('p')
                         if link_tag:
+                            resolved_link = normalize_onion_url(link_tag.get('href'), current_url)
                             page_results.append({
                                 'Termo Pesquisado': term,
                                 'Motor de Busca': name,
                                 'Título': link_tag.get_text(strip=True),
-                                'URL': link_tag.get('href'),
+                                'URL': resolved_link,
                                 'Snippet': snippet_tag.get_text(strip=True) if snippet_tag else "",
                                 'Data': pd.Timestamp.now()
                             })
                 else:
                     # Parser Genérico
-                    generic_results = parse_generic(soup, term)
+                    generic_results = parse_generic(soup, term, current_url)
                     # Adiciona o nome do motor
                     for res in generic_results:
                         res['Motor de Busca'] = name
@@ -211,7 +306,7 @@ def search_engine(name, engine_config, term, proxies):
                     break # Sem mais páginas
                     
             else:
-                print(colored(f"    [X] {name} retornou status {resp.status_code}", "red"))
+                print(colored(f"    [X] {name} retornou status {resp.status_code if resp else 'sem resposta'}", "red"))
                 break
                 
         except requests.exceptions.Timeout:
@@ -225,6 +320,34 @@ def search_engine(name, engine_config, term, proxies):
             break
         
     return results
+
+def enrich_results(results, proxies, max_fetch=ENRICH_FETCH_LIMIT):
+    visited = set()
+    fetched = 0
+    for r in results:
+        if fetched >= max_fetch:
+            break
+        url = r.get('URL')
+        if not isinstance(url, str) or '.onion' not in url:
+            continue
+        if url in visited:
+            continue
+        resp = fetch_url(url, proxies, timeout=45, retries=1)
+        visited.add(url)
+        fetched += 1
+        if resp and resp.status_code == 200:
+            soup = BeautifulSoup(resp.text, 'html.parser')
+            title = soup.title.get_text(strip=True) if soup.title else ""
+            meta = soup.find('meta', attrs={'name': 'description'})
+            meta_desc = meta.get('content', '').strip() if meta and meta.get('content') else ""
+            text_snippet = soup.get_text(separator=' ', strip=True)[:500]
+            if not r.get('Título'):
+                r['Título'] = title if title else r.get('Título', '')
+            if not r.get('Snippet'):
+                r['Snippet'] = meta_desc if meta_desc else text_snippet
+            r['Status'] = '200'
+        else:
+            r['Status'] = str(resp.status_code) if resp else 'error'
 
 def main():
     print(colored("=== Darkweb Multi-Engine Search Crawler ===", "magenta", attrs=['bold']))
@@ -278,6 +401,10 @@ def main():
     # 4. Relatório
     if all_findings:
         output_file = 'resultados_busca_darkweb.xlsx'
+        try:
+            enrich_results(all_findings, proxies, ENRICH_FETCH_LIMIT)
+        except Exception as e:
+            print(colored(f"[AVISO] Enriquecimento falhou: {e}", "yellow"))
         new_results = pd.DataFrame(all_findings)
         
         # Carregar resultados existentes se houver
