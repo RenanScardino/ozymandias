@@ -106,7 +106,6 @@ def start_crawler(term, tor_port, mode="console"):
         return False, str(e)
 def run_probe():
     try:
-        if os.name == 'nt':
         py = sys.executable or ("python" if os.name == 'nt' else "python3")
         if os.name == 'nt':
             subprocess.Popen([py, "probe_engines.py"], creationflags=subprocess.CREATE_NEW_CONSOLE)
@@ -126,6 +125,7 @@ def run_probe():
                     break
             if not launched:
                 subprocess.Popen([py, "probe_engines.py"], stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+        return True, None
     except Exception as e:
         return False, str(e)
 def summarize_probe():
