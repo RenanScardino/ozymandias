@@ -372,7 +372,57 @@ def find_next_page_torch(soup, current_url):
     next_url = urllib.parse.urlunparse((parsed.scheme, parsed.netloc, parsed.path, parsed.params, new_query, parsed.fragment))
     return next_url
 
+def find_next_page_ahmia(soup, current_url):
+    link = soup.find('link', rel='next')
+    if link and link.get('href'):
+        return link.get('href')
+    a_rel_next = soup.find('a', attrs={'rel': 'next'})
+    if a_rel_next and a_rel_next.get('href'):
+        return a_rel_next.get('href')
+    for a in soup.find_all('a', href=True):
+        txt = a.get_text(strip=True).lower()
+        if re.search(r'(next|próxima|proxima|>>|›|»)', txt, re.IGNORECASE):
+            return a['href']
+    parsed = urllib.parse.urlparse(current_url)
+    qs = urllib.parse.parse_qs(parsed.query)
+    def _get_int(d, k, default):
+        try:
+            return int(d.get(k, [default])[0])
+        except:
+            return default
+    start = _get_int(qs, 'start', -1)
+    page = _get_int(qs, 'page', -1)
+    next_qs = {k: v[:] for k, v in qs.items()}
+    if start >= 0:
+        next_qs['start'] = [str(start + 10)]
+    elif page >= 0:
+        next_qs['page'] = [str(page + 1)]
+    else:
+        next_qs['page'] = ['2']
+    new_query = urllib.parse.urlencode(next_qs, doseq=True)
+    next_url = urllib.parse.urlunparse((parsed.scheme, parsed.netloc, parsed.path, parsed.params, new_query, parsed.fragment))
+    return next_url
 def parse_ahmia(soup, term, base_url):
+    def extract_onion_from_href(href_value):
+        if not href_value:
+            return None
+        full = normalize_onion_url(href_value, base_url)
+        if full and '.onion' in full:
+            parsed = urllib.parse.urlparse(full)
+            qs = urllib.parse.parse_qs(parsed.query)
+            for key in ['u', 'url', 'target', 'redir', 'href']:
+                if key in qs:
+                    try:
+                        candidate = qs[key][0]
+                        candidate = urllib.parse.unquote_plus(candidate)
+                        if '.onion' in candidate:
+                            if not urllib.parse.urlparse(candidate).scheme:
+                                candidate = 'http://' + candidate
+                            return candidate
+                    except:
+                        pass
+            return full
+        return None
     results = []
     items = soup.select('li.result') or soup.select('li[class*="result"]') or soup.select('div.result') or soup.select('article.result') or soup.select('#results li')
     if items:
@@ -380,7 +430,7 @@ def parse_ahmia(soup, term, base_url):
             link_tag = item.find('a', href=True)
             if not link_tag:
                 continue
-            resolved_link = normalize_onion_url(link_tag.get('href'), base_url)
+            resolved_link = extract_onion_from_href(link_tag.get('href'))
             if not resolved_link or '.onion' not in resolved_link:
                 continue
             snippet_tag = item.find('p')
@@ -468,6 +518,8 @@ def search_engine(name, engine_config, term, proxies):
                 # Tenta encontrar a próxima página
                 if name == 'Torch':
                     next_link = find_next_page_torch(soup, current_url)
+                elif name == 'Ahmia':
+                    next_link = find_next_page_ahmia(soup, current_url)
                 else:
                     next_link = find_next_page(soup, current_url)
                 if next_link:

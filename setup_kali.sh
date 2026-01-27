@@ -42,6 +42,6 @@ pip install -r requirements.txt
 echo -e "\n${GREEN}=== Instalação Concluída! ===${NC}"
 echo -e "Para usar o projeto (Recomendado via Dashboard):"
 echo -e "1. Ative o ambiente: ${YELLOW}source venv/bin/activate${NC}"
-echo -e "2. Inicie o Dashboard: ${YELLOW}streamlit run dashboard.py${NC}"
+echo -e "2. Inicie o Dashboard: ${YELLOW}python -m streamlit run dashboard.py${NC}"
 echo -e "\nOu execute apenas o crawler via terminal:"
-echo -e "${YELLOW}python crawler.py${NC}"
+echo -e "${YELLOW}python3 crawler.py${NC}"

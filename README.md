@@ -12,12 +12,13 @@ Ferramenta avançada de **Threat Intelligence** (OSINT) para monitoramento autom
 
 ## 🚀 Funcionalidades Principais
 
-*   **🕵️ Busca Multi-Engine**: Varre simultaneamente **12 motores de busca** da Darkweb para máxima cobertura.
-*   **📑 Paginação Automática**: Diferencial exclusivo que percorre múltiplas páginas de resultados (Next/Próxima), não parando apenas na primeira página.
-*   **📡 Conexão Tor Híbrida**: Detecta e utiliza automaticamente o **Tor Browser** (Windows/Porta 9150) ou **Serviço Tor** (Linux/Porta 9050).
-*   **📊 Dashboard Profissional**: Interface gráfica (Streamlit) "Dark Mode" com métricas, gráficos e filtros de dados em tempo real.
-*   **🐢 Comportamento Humano**: Pausas aleatórias e rotação de User-Agents para evitar bloqueios e sobrecarga na rede Tor.
-*   **💾 Persistência de Dados**: Salva histórico de buscas em Excel, com deduplicação inteligente de links.
+* **🕵️ Busca Multi-Engine**: Varre simultaneamente **12 motores de busca** da Darkweb para máxima cobertura.
+* **📑 Paginação Automática**: Percorre múltiplas páginas de resultados com heurísticas específicas por motor (Torch/Ahmia) e genéricas para demais.
+* **🤖 Análise Profunda de Termos**: Acessa cada link encontrado e avalia presença do termo no título, meta e corpo com normalização inteligente, gerando Ocorrencias, Score e Contextos.
+* **📡 Conexão Tor Híbrida**: Detecta e usa **Tor Browser** (Windows/9150) ou **Serviço Tor** (Linux/9050).
+* **📊 Dashboard Profissional**: Interface (Streamlit) com métricas, gráficos, filtros e leitura de logs.
+* **📝 Logging Completo**: Gera logs em `logs/varredura_YYYYmmdd_HHMMSS.log` com todo o fluxo da varredura.
+* **💾 Persistência de Dados**: Salva histórico em Excel, deduplicando por URL.
 
 ---
 
@@ -47,7 +48,7 @@ O crawler realiza varreduras nos seguintes indexadores da rede Onion:
 ```bash
 Darkweb/
 ├── crawler.py          # 🧠 CÉREBRO: Script de busca, paginação e conexão Tor
-├── dashboard.py        # 🖥️ VISUAL: Interface gráfica Streamlit v2.0
+├── dashboard.py        # 🖥️ VISUAL: Interface Streamlit com abas (v3.0)
 ├── probe_engines.py    # 🛠️ DIAGNÓSTICO: Testa quais buscadores estão online
 ├── setup_kali.sh       # 🐧 INSTALADOR: Script de configuração automática para Kali
 ├── requirements.txt    # 📦 DEPENDÊNCIAS: Lista de bibliotecas Python
@@ -58,7 +59,7 @@ Darkweb/
 
 ## 💻 Instalação e Uso
 
-### 🐧 Opção 1: Kali Linux / Debian (Recomendado)
+### 🐧 Opção 1: Linux (Kali/Debian)
 
 O projeto inclui um script de "instalação em um clique" que configura o Tor e o ambiente Python.
 
@@ -74,7 +75,7 @@ O projeto inclui um script de "instalação em um clique" que configura o Tor e 
     Ative o ambiente virtual e inicie o dashboard:
     ```bash
     source venv/bin/activate
-    streamlit run dashboard.py
+    python -m streamlit run dashboard.py
     ```
     *O navegador abrirá. Use a barra lateral para inserir um termo e iniciar a busca.*
 
@@ -91,7 +92,7 @@ O projeto inclui um script de "instalação em um clique" que configura o Tor e 
 
 3.  **Execução**:
     ```powershell
-    streamlit run dashboard.py
+    python -m streamlit run dashboard.py
     ```
 
 ---
@@ -100,14 +101,16 @@ O projeto inclui um script de "instalação em um clique" que configura o Tor e 
 
 1.  **Status do Tor**: Verifique no menu lateral se aparece **"✅ TOR CONECTADO"**.
     *   Se estiver vermelho, verifique se o Tor Browser (Windows) ou serviço Tor (Linux) está rodando.
-2.  **Busca**:
-    *   Digite um termo (ex: `passport`, `leak`, `cpf`) no campo de busca lateral.
-    *   Clique em **"🚀 Executar Crawler"**.
-3.  **Monitoramento**:
-    *   Uma janela preta (terminal) se abrirá mostrando o progresso detalhado: `> Pesquisando 'termo' no Ahmia...`.
-    *   Aguarde a finalização.
-4.  **Análise**:
-    *   O dashboard carrega os dados automaticamente. Use a aba **"🔎 Explorador de Dados"** para filtrar e exportar os resultados.
+2. **Busca**:
+    * Digite um termo (ex: `passport`, `leak`, `cpf`).
+    * Escolha modo de execução (Console externo/Background no Windows).
+    * Clique em **Iniciar**.
+3. **Logs**:
+    * Aba **📝 Logs** mostra o arquivo atual com auto-refresh opcional.
+4. **Dados**:
+    * Aba **🔎 Dados** permite filtrar por palavra e exportar Excel.
+5. **Sondagem**:
+    * Aba **🧪 Buscadores** lista arquivos de teste em `debug_html/` e abre a pasta.
 
 ---
 
