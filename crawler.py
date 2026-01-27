@@ -13,6 +13,7 @@ import re
 import logging
 from datetime import datetime
 import unicodedata
+import json
 
 # --- CONFIGURAÇÃO ---
 SEARCH_ENGINES = {
@@ -76,6 +77,7 @@ USER_AGENTS = [
 ENRICH_FETCH_LIMIT = 15
 LOGGER = None
 LOG_FILE = None
+KNOWLEDGE_FILE = 'engine_knowledge.json'
 
 def init_logger():
     global LOGGER, LOG_FILE
@@ -91,6 +93,68 @@ def init_logger():
     if not LOGGER.handlers:
         LOGGER.addHandler(fh)
     return LOGGER, LOG_FILE
+def load_knowledge():
+    try:
+        if os.path.exists(KNOWLEDGE_FILE):
+            with open(KNOWLEDGE_FILE, 'r', encoding='utf-8') as f:
+                return json.load(f)
+    except:
+        pass
+    return {'engines': {}}
+def save_knowledge(data):
+    try:
+        with open(KNOWLEDGE_FILE, 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    except:
+        pass
+def record_engine_result(knowledge, name, host, success):
+    eng = knowledge['engines'].setdefault(name, {'candidates': {}})
+    cand = eng['candidates'].setdefault(host, {'success': 0, 'fail': 0, 'last': None})
+    if success:
+        cand['success'] += 1
+    else:
+        cand['fail'] += 1
+    cand['last'] = datetime.now().isoformat()
+    save_knowledge(knowledge)
+def best_candidate_host(knowledge, name):
+    eng = knowledge['engines'].get(name)
+    if not eng:
+        return None
+    items = []
+    for host, stats in eng.get('candidates', {}).items():
+        score = stats.get('success', 0) - stats.get('fail', 0)
+        items.append((score, host))
+    if not items:
+        return None
+    items.sort(key=lambda x: x[0], reverse=True)
+    return items[0][1]
+def swap_host_in_url(url, new_host):
+    parsed = urllib.parse.urlparse(url)
+    return urllib.parse.urlunparse((parsed.scheme or 'http', new_host, parsed.path, parsed.params, parsed.query, parsed.fragment))
+def extract_onion_hosts_from_html(html):
+    hosts = set()
+    for m in re.finditer(r'([a-z2-7]{16,56}\.onion)', html, re.IGNORECASE):
+        hosts.add(m.group(1))
+    return list(hosts)
+def adapt_engine(name, engine_config, proxies, knowledge, max_candidates=8):
+    query = f"{name} onion"
+    try:
+        headers = {'User-Agent': random.choice(USER_AGENTS)}
+        r = requests.get('https://duckduckgo.com/html/', params={'q': query}, headers=headers, timeout=40)
+        html = r.text if r and r.status_code == 200 else ""
+    except:
+        html = ""
+    candidates = extract_onion_hosts_from_html(html)[:max_candidates]
+    url_test = engine_config['url'].format(query='test')
+    best = None
+    for host in candidates:
+        test_url = swap_host_in_url(url_test, host)
+        resp = fetch_url(test_url, proxies, timeout=50, retries=1)
+        ok = bool(resp and resp.status_code == 200)
+        record_engine_result(knowledge, name, host, ok)
+        if ok and best is None:
+            best = host
+    return best
 
 def normalize_text(s):
     if not isinstance(s, str):
@@ -171,6 +235,35 @@ def normalize_onion_url(href, base_url):
     if '.onion' in abs_url and not parsed.scheme:
         abs_url = 'http://' + abs_url
     return abs_url
+def extract_onion_from_href(href_value, base_url):
+    if not href_value:
+        return None
+    full = normalize_onion_url(href_value, base_url)
+    if not full:
+        return None
+    unquoted_full = urllib.parse.unquote_plus(full)
+    if '.onion' in unquoted_full:
+        parsed = urllib.parse.urlparse(unquoted_full)
+        qs = urllib.parse.parse_qs(parsed.query)
+        for key in ['u', 'url', 'target', 'redir', 'href', 'address', 'site', 'link']:
+            if key in qs:
+                try:
+                    candidate = qs[key][0]
+                    candidate = urllib.parse.unquote_plus(candidate)
+                    if '.onion' in candidate:
+                        if not urllib.parse.urlparse(candidate).scheme:
+                            candidate = 'http://' + candidate
+                        return candidate
+                except:
+                    pass
+        m = re.search(r'([a-z2-7]{16,56}\.onion[^\s\"\'<>]*)', unquoted_full)
+        if m:
+            candidate = m.group(1)
+            if not urllib.parse.urlparse(candidate).scheme:
+                candidate = 'http://' + candidate
+            return candidate
+        return full
+    return None
 
 def fetch_url(url, proxies, timeout=60, retries=2):
     attempt = 0
@@ -243,27 +336,16 @@ def check_tor_connection(proxies):
 def parse_generic(soup, term, base_url):
     """Tenta extrair resultados de qualquer buscador simples."""
     results = []
-    parsed_base = urllib.parse.urlparse(base_url)
-    base_host = parsed_base.netloc
     links = soup.find_all('a')
     for link in links:
         href = link.get('href')
-        resolved = normalize_onion_url(href, base_url) if href else None
+        resolved = extract_onion_from_href(href, base_url) if href else None
         if resolved and '.onion' in resolved:
-            target_host = urllib.parse.urlparse(resolved).netloc
-            if target_host and base_host and target_host == base_host:
-                continue
-                
-            title = link.get_text(strip=True)
-            if not title:
-                title = resolved
-                
-            # Snippet simples (texto ao redor ou pai)
+            title = link.get_text(strip=True) or resolved
             snippet = ""
             parent = link.parent
             if parent:
                 snippet = parent.get_text(strip=True)[:200]
-            
             results.append({
                 'Termo Pesquisado': term,
                 'Título': title,
@@ -403,26 +485,6 @@ def find_next_page_ahmia(soup, current_url):
     next_url = urllib.parse.urlunparse((parsed.scheme, parsed.netloc, parsed.path, parsed.params, new_query, parsed.fragment))
     return next_url
 def parse_ahmia(soup, term, base_url):
-    def extract_onion_from_href(href_value):
-        if not href_value:
-            return None
-        full = normalize_onion_url(href_value, base_url)
-        if full and '.onion' in full:
-            parsed = urllib.parse.urlparse(full)
-            qs = urllib.parse.parse_qs(parsed.query)
-            for key in ['u', 'url', 'target', 'redir', 'href']:
-                if key in qs:
-                    try:
-                        candidate = qs[key][0]
-                        candidate = urllib.parse.unquote_plus(candidate)
-                        if '.onion' in candidate:
-                            if not urllib.parse.urlparse(candidate).scheme:
-                                candidate = 'http://' + candidate
-                            return candidate
-                    except:
-                        pass
-            return full
-        return None
     results = []
     items = soup.select('li.result') or soup.select('li[class*="result"]') or soup.select('div.result') or soup.select('article.result') or soup.select('#results li')
     if items:
@@ -430,7 +492,7 @@ def parse_ahmia(soup, term, base_url):
             link_tag = item.find('a', href=True)
             if not link_tag:
                 continue
-            resolved_link = extract_onion_from_href(link_tag.get('href'))
+            resolved_link = extract_onion_from_href(link_tag.get('href'), base_url)
             if not resolved_link or '.onion' not in resolved_link:
                 continue
             snippet_tag = item.find('p')
@@ -452,8 +514,10 @@ def search_engine(name, engine_config, term, proxies):
     """Realiza a busca em um motor específico com paginação automática."""
     results = []
     
-    # URL Inicial
-    current_url = engine_config['url'].format(query=urllib.parse.quote_plus(term))
+    knowledge = load_knowledge()
+    base_url = engine_config['url'].format(query=urllib.parse.quote_plus(term))
+    override = best_candidate_host(knowledge, name)
+    current_url = swap_host_in_url(base_url, override) if override else base_url
     
     # Limite de segurança para evitar loops infinitos
     MAX_PAGES = 3 
@@ -474,6 +538,7 @@ def search_engine(name, engine_config, term, proxies):
             
             if resp and resp.status_code == 200:
                 soup = BeautifulSoup(resp.text, 'html.parser')
+                record_engine_result(knowledge, name, urllib.parse.urlparse(current_url).netloc, True)
                 
                 page_results = []
                 
@@ -542,17 +607,44 @@ def search_engine(name, engine_config, term, proxies):
                 print(colored(f"    [X] {name} retornou status {resp.status_code if resp else 'sem resposta'}", "red"))
                 if LOGGER:
                     LOGGER.error(f"Falha resposta motor='{name}' status='{resp.status_code if resp else 'none'}'")
+                record_engine_result(knowledge, name, urllib.parse.urlparse(current_url).netloc, False)
+                new_host = adapt_engine(name, engine_config, proxies, knowledge)
+                if new_host:
+                    current_url = swap_host_in_url(base_url, new_host)
+                    print(colored(f"    [+] Adaptação: usando host {new_host} para {name}", "yellow"))
+                    if LOGGER:
+                        LOGGER.info(f"Adaptação motor='{name}' host='{new_host}'")
+                    time.sleep(random.uniform(3, 6))
+                    continue
                 break
                 
         except requests.exceptions.Timeout:
             print(colored(f"    [X] Timeout ao conectar com {name}", "red"))
             if LOGGER:
                 LOGGER.error(f"Timeout motor='{name}'")
+            record_engine_result(knowledge, name, urllib.parse.urlparse(current_url).netloc, False)
+            new_host = adapt_engine(name, engine_config, proxies, knowledge)
+            if new_host:
+                current_url = swap_host_in_url(base_url, new_host)
+                print(colored(f"    [+] Adaptação: usando host {new_host} para {name}", "yellow"))
+                if LOGGER:
+                    LOGGER.info(f"Adaptação motor='{name}' host='{new_host}'")
+                time.sleep(random.uniform(3, 6))
+                continue
             break
         except requests.exceptions.ConnectionError:
             print(colored(f"    [X] Falha de conexão com {name} (Pode estar offline)", "red"))
             if LOGGER:
                 LOGGER.error(f"Conexão falhou motor='{name}'")
+            record_engine_result(knowledge, name, urllib.parse.urlparse(current_url).netloc, False)
+            new_host = adapt_engine(name, engine_config, proxies, knowledge)
+            if new_host:
+                current_url = swap_host_in_url(base_url, new_host)
+                print(colored(f"    [+] Adaptação: usando host {new_host} para {name}", "yellow"))
+                if LOGGER:
+                    LOGGER.info(f"Adaptação motor='{name}' host='{new_host}'")
+                time.sleep(random.uniform(3, 6))
+                continue
             break
         except Exception as e:
             print(colored(f"    [X] Erro inesperado no {name}: {e}", "red"))
