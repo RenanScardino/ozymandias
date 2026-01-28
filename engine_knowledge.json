@@ -1,0 +1,112 @@
+{
+  "engines": {
+    "Ahmia": {
+      "candidates": {
+        "juhanurmihxlp77nkq76byazcldy2hlmovfu2epvl5ankdibsot4csyd.onion": {
+          "success": 2,
+          "fail": 0,
+          "last": "2026-01-28T08:45:36.552729"
+        }
+      }
+    },
+    "Torch": {
+      "candidates": {
+        "xmh57jrknzkhv6y3ls3ubitzfqnkrwxhopf5aygthi7d6rplyvk3noyd.onion": {
+          "success": 6,
+          "fail": 0,
+          "last": "2026-01-28T08:47:16.689237"
+        }
+      }
+    },
+    "Haystak": {
+      "candidates": {
+        "haystak5njsmn2hqkewecpaxetahtwhsbsa64jom2k22z5afxhnpxfid.onion": {
+          "success": 0,
+          "fail": 4,
+          "last": "2026-01-28T08:48:28.161461"
+        }
+      }
+    },
+    "OnionLand": {
+      "candidates": {
+        "3bbad7fauom4d6sgppalyqddsqbf5u5p56b5k5uk2zxsy3d6ey2jobad.onion": {
+          "success": 2,
+          "fail": 1,
+          "last": "2026-01-28T08:48:38.720252"
+        }
+      }
+    },
+    "TorDex": {
+      "candidates": {
+        "tordexu73joywapk2txdr54jed4imqledpcvcuf75qsas2gwdgksvnyd.onion": {
+          "success": 0,
+          "fail": 2,
+          "last": "2026-01-28T08:51:01.030617"
+        }
+      }
+    },
+    "DarknetSearch": {
+      "candidates": {
+        "darkent74yfc3qe7vhd2ms53ynr3l5hbjz4on2x76e7odjiyrjlirvid.onion": {
+          "success": 2,
+          "fail": 0,
+          "last": "2026-01-28T08:51:23.829080"
+        }
+      }
+    },
+    "Tor66": {
+      "candidates": {
+        "tor66sewebgixwhcqfnp5inzp5x5uohhdy3kvtnyfxc2e5mxiuh34iid.onion": {
+          "success": 2,
+          "fail": 0,
+          "last": "2026-01-28T08:52:33.004843"
+        }
+      }
+    },
+    "OnionRealm": {
+      "candidates": {
+        "orealmvxooetglfeguv2vp65a3rig2baq2ljc7jxxs4hsqsrcemkxcad.onion": {
+          "success": 2,
+          "fail": 0,
+          "last": "2026-01-28T08:53:36.160306"
+        }
+      }
+    },
+    "Excavator": {
+      "candidates": {
+        "2fd6cemt4gmccflhm6imvdfvli3nf7zn6rfrwpsy7uhxrgbypvwf5fad.onion": {
+          "success": 1,
+          "fail": 1,
+          "last": "2026-01-28T08:59:14.481688"
+        }
+      }
+    },
+    "TthSearch": {
+      "candidates": {
+        "tth4he7kdfmfwq2k7yaj2ggjdva7rdpbch42q6xgoorbabjeklyfbmyd.onion": {
+          "success": 2,
+          "fail": 0,
+          "last": "2026-01-28T09:00:29.270900"
+        }
+      }
+    },
+    "Labyrinth": {
+      "candidates": {
+        "labyrinthkh3uokhu2a5nwi4e6kedmbkxar3w6vgm2ipdb7ms3zdzlad.onion": {
+          "success": 0,
+          "fail": 2,
+          "last": "2026-01-28T09:01:48.310040"
+        }
+      }
+    },
+    "DeepSearch": {
+      "candidates": {
+        "dgwq7uzh5ro2f7p34begy4kmxue5gst7lk2spxda63zkrpuegtj4opyd.onion": {
+          "success": 2,
+          "fail": 0,
+          "last": "2026-01-28T09:01:59.020319"
+        }
+      }
+    }
+  }
+}

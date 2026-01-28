@@ -14,6 +14,9 @@ import logging
 from datetime import datetime
 import unicodedata
 import json
+import argparse
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import sqlite3
 
 # --- CONFIGURAÇÃO ---
 SEARCH_ENGINES = {
@@ -66,6 +69,24 @@ SEARCH_ENGINES = {
         'selector': 'generic'
     }
 }
+DEFAULT_SEARCH_ENGINES = [
+    "http://juhanurmihxlp77nkq76byazcldy2hlmovfu2epvl5ankdibsot4csyd.onion/search/?q={query}",
+    "http://3bbad7fauom4d6sgppalyqddsqbf5u5p56b5k5uk2zxsy3d6ey2jobad.onion/search?q={query}",
+    "http://iy3544gmoeclh5de6gez2256v6pjh4omhpqdh2wpeeppjtvqmjhkfwad.onion/torgle/?query={query}",
+    "http://amnesia7u5odx5xbwtpnqk3edybgud5bmiagu75bnqx2crntw5kry7ad.onion/search?query={query}",
+    "http://kaizerwfvp5gxu6cppibp7jhcqptavq3iqef66wbxenh6a2fklibdvid.onion/search?q={query}",
+    "http://anima4ffe27xmakwnseih3ic2y7y3l6e7fucwk4oerdn4odf7k74tbid.onion/search?q={query}",
+    "http://tornadoxn3viscgz647shlysdy7ea5zqzwda7hierekeuokh5eh5b3qd.onion/search?q={query}",
+    "http://tornetupfu7gcgidt33ftnungxzyfq2pygui5qdoyss34xbgx2qruzid.onion/search?q={query}",
+    "http://torlbmqwtudkorme6prgfpmsnile7ug2zm4u3ejpcncxuhpu4k2j4kyd.onion/index.php?a=search&q={query}",
+    "http://findtorroveq5wdnipkaojfpqulxnkhblymc7aramjzajcvpptd4rjqd.onion/search?q={query}",
+    "http://2fd6cemt4gmccflhm6imvdfvli3nf7zn6rfrwpsy7uhxrgbypvwf5fad.onion/search?query={query}",
+    "http://oniwayzz74cv2puhsgx4dpjwieww4wdphsydqvf5q7eyz4myjvyw26ad.onion/search.php?s={query}",
+    "http://tor66sewebgixwhcqfnp5inzp5x5uohhdy3kvtnyfxc2e5mxiuh34iid.onion/search?q={query}",
+    "http://3fzh7yuupdfyjhwt3ugzqqof6ulbcl27ecev33knxe3u7goi3vfn2qqd.onion/oss/index.php?search={query}",
+    "http://torgolnpeouim56dykfob6jh5r2ps2j73enc42s2um4ufob3ny4fcdyd.onion/?q={query}",
+    "http://searchgf7gdtauh7bhnbyed4ivxqmuoat3nm6zfrg3ymkq6mtnpye3ad.onion/search?q={query}"
+]
 
 USER_AGENTS = [
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:119.0) Gecko/20100101 Firefox/119.0',
@@ -78,6 +99,7 @@ ENRICH_FETCH_LIMIT = 15
 LOGGER = None
 LOG_FILE = None
 KNOWLEDGE_FILE = 'engine_knowledge.json'
+KNOWLEDGE_DB = 'knowledge.db'
 
 def init_logger():
     global LOGGER, LOG_FILE
@@ -155,6 +177,67 @@ def adapt_engine(name, engine_config, proxies, knowledge, max_candidates=8):
         if ok and best is None:
             best = host
     return best
+def init_db():
+    try:
+        conn = sqlite3.connect(KNOWLEDGE_DB)
+        cur = conn.cursor()
+        cur.execute("CREATE TABLE IF NOT EXISTS engines (name TEXT, host TEXT, success INTEGER, fail INTEGER, last TEXT, UNIQUE(name, host))")
+        cur.execute("CREATE TABLE IF NOT EXISTS links (url TEXT PRIMARY KEY, title TEXT, engine TEXT, term TEXT, status TEXT, score INTEGER, contexts TEXT, discovered_at TEXT)")
+        cur.execute("CREATE TABLE IF NOT EXISTS endpoints (source TEXT, endpoint TEXT, type TEXT, added_at TEXT, last_ok_at TEXT, ok_count INTEGER, fail_count INTEGER, UNIQUE(source, endpoint))")
+        cur.execute("CREATE TABLE IF NOT EXISTS keywords (term TEXT, keyword TEXT, weight REAL, updated_at TEXT, UNIQUE(term, keyword))")
+        conn.commit()
+        conn.close()
+    except:
+        pass
+def db_exec(query, params=()):
+    try:
+        conn = sqlite3.connect(KNOWLEDGE_DB)
+        cur = conn.cursor()
+        cur.execute(query, params)
+        conn.commit()
+        conn.close()
+    except:
+        pass
+def db_upsert_engine(name, host, success_inc=0, fail_inc=0, last_ts=None):
+    ts = last_ts or datetime.now().isoformat()
+    db_exec("INSERT INTO engines (name, host, success, fail, last) VALUES (?, ?, ?, ?, ?) ON CONFLICT(name, host) DO UPDATE SET success = success + ?, fail = fail + ?, last = ?", (name, host, success_inc, fail_inc, ts, success_inc, fail_inc, ts))
+def db_upsert_link(url, title, engine, term, status, score, contexts):
+    db_exec("INSERT OR REPLACE INTO links (url, title, engine, term, status, score, contexts, discovered_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", (url, title, engine, term, status, score if isinstance(score, int) else 0, contexts or "", datetime.now().isoformat()))
+def db_upsert_endpoint(source, endpoint, type_name, ok=False):
+    ts = datetime.now().isoformat()
+    if ok:
+        db_exec("INSERT INTO endpoints (source, endpoint, type, added_at, last_ok_at, ok_count, fail_count) VALUES (?, ?, ?, ?, ?, 1, 0) ON CONFLICT(source, endpoint) DO UPDATE SET ok_count = ok_count + 1, last_ok_at = ?", (source, endpoint, type_name, ts, ts, ts))
+    else:
+        db_exec("INSERT INTO endpoints (source, endpoint, type, added_at, last_ok_at, ok_count, fail_count) VALUES (?, ?, ?, ?, NULL, 0, 1) ON CONFLICT(source, endpoint) DO UPDATE SET fail_count = fail_count + 1", (source, endpoint, type_name, ts))
+def db_upsert_keyword(term, keyword, delta):
+    ts = datetime.now().isoformat()
+    db_exec("INSERT INTO keywords (term, keyword, weight, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(term, keyword) DO UPDATE SET weight = weight + ?, updated_at = ?", (term, keyword, float(delta), ts, float(delta), ts))
+def get_top_keywords(term, limit=6):
+    try:
+        conn = sqlite3.connect(KNOWLEDGE_DB)
+        cur = conn.cursor()
+        cur.execute("SELECT keyword FROM keywords WHERE term = ? ORDER BY weight DESC LIMIT ?", (term, limit))
+        rows = cur.fetchall()
+        conn.close()
+        return [r[0] for r in rows]
+    except:
+        return []
+def tokenize_text(s):
+    if not isinstance(s, str):
+        return []
+    s = normalize_text(s)
+    toks = re.findall(r'[a-z0-9]{3,}', s)
+    stop = set(['http','https','www','onion'])
+    return [t for t in toks if t not in stop]
+def update_keywords_for_term(term, text):
+    toks = tokenize_text(text)
+    if not toks:
+        return
+    freq = {}
+    for t in toks:
+        freq[t] = freq.get(t, 0) + 1
+    for k, v in freq.items():
+        db_upsert_keyword(term, k, v)
 
 def normalize_text(s):
     if not isinstance(s, str):
@@ -209,6 +292,10 @@ def analyze_page_for_term(soup, term):
     total_occ = occ_title + occ_meta + occ_body
     score = total_occ + (2 if occ_title else 0) + (1 if occ_meta else 0)
     contexts = ctx_title + ctx_meta + ctx_body
+    try:
+        update_keywords_for_term(term, body_text)
+    except:
+        pass
     return {
         'Ocorrencias': total_occ,
         'Score': score,
@@ -216,6 +303,11 @@ def analyze_page_for_term(soup, term):
         'TituloExtraido': title,
         'MetaDescExtraida': meta_desc
     }
+def extract_onion_links_from_html(html):
+    found = set()
+    for m in re.finditer(r'([a-z2-7]{16,56}\.onion[^\s\"\'<>]*)', html, re.IGNORECASE):
+        found.add(m.group(1))
+    return list(found)
 
 def get_headers():
     ua = random.choice(USER_AGENTS)
@@ -316,7 +408,6 @@ def get_tor_port():
     return None
 
 def check_tor_connection(proxies):
-    """Verifica se a conexão está passando pelo Tor."""
     try:
         print(colored("[INFO] Verificando conexão com a rede Tor...", "yellow"))
         r = requests.get('https://check.torproject.org/api/ip', proxies=proxies, timeout=30)
@@ -328,8 +419,16 @@ def check_tor_connection(proxies):
             else:
                 print(colored(f"[PERIGO] NÃO conectado ao Tor. IP: {data.get('IP')}", "red", attrs=['bold']))
                 return False
-    except Exception as e:
-        print(colored(f"[ERRO] Falha ao conectar ao Tor: {e}", "red"))
+    except Exception:
+        pass
+    try:
+        test_url = SEARCH_ENGINES['Ahmia']['url'].format(query=urllib.parse.quote_plus("test"))
+        r2 = requests.get(test_url, proxies=proxies, timeout=30, headers=get_headers())
+        if r2.status_code in (200, 403, 429):
+            print(colored("[INFO] Conexão via SOCKS parece funcional para .onion", "green"))
+            return True
+    except Exception as e2:
+        print(colored(f"[ERRO] Falha ao verificar conexão Tor: {e2}", "red"))
         return False
     return False
 
@@ -354,6 +453,63 @@ def parse_generic(soup, term, base_url):
                 'Data': pd.Timestamp.now()
             })
     return results
+def fetch_external_engine(endpoint, term, proxies):
+    url = endpoint.format(query=urllib.parse.quote_plus(term))
+    headers = get_headers()
+    try:
+        resp = requests.get(url, headers=headers, proxies=proxies, timeout=50)
+        if resp.status_code != 200:
+            return []
+        soup = BeautifulSoup(resp.text, 'html.parser')
+        found = []
+        for a in soup.find_all('a', href=True):
+            href = a['href']
+            resolved = extract_onion_from_href(href, url)
+            if resolved and '.onion' in resolved:
+                title = a.get_text(strip=True) or resolved
+                found.append({
+                    'Termo Pesquisado': term,
+                    'Título': title,
+                    'URL': resolved,
+                    'Snippet': '',
+                    'Motor de Busca': urllib.parse.urlparse(url).netloc,
+                    'Data': pd.Timestamp.now()
+                })
+        try:
+            host = urllib.parse.urlparse(url).netloc
+            db_upsert_endpoint(host, url, "engine", ok=True)
+        except:
+            pass
+        return found
+    except:
+        try:
+            host = urllib.parse.urlparse(url).netloc
+            db_upsert_endpoint(host, url, "engine", ok=False)
+        except:
+            pass
+        return []
+def aggregate_external_engines(term, proxies, max_workers=5):
+    results = []
+    with ThreadPoolExecutor(max_workers=max_workers) as ex:
+        futures = [ex.submit(fetch_external_engine, ep, term, proxies) for ep in DEFAULT_SEARCH_ENGINES]
+        for fut in as_completed(futures):
+            try:
+                items = fut.result()
+                results.extend(items or [])
+            except:
+                pass
+    seen = set()
+    unique = []
+    for r in results:
+        url = r.get('URL')
+        if not url:
+            continue
+        clean = url.rstrip('/')
+        if clean in seen:
+            continue
+        seen.add(clean)
+        unique.append(r)
+    return unique
 
 def find_next_page(soup, current_url):
     """Tenta encontrar o link para a próxima página de resultados."""
@@ -486,20 +642,34 @@ def find_next_page_ahmia(soup, current_url):
     return next_url
 def parse_ahmia(soup, term, base_url):
     results = []
-    items = soup.select('li.result') or soup.select('li[class*="result"]') or soup.select('div.result') or soup.select('article.result') or soup.select('#results li')
+    items = soup.select('li.result') or soup.select('li[class*=\"result\"]') or soup.select('div.result') or soup.select('article.result') or soup.select('#results li') or soup.select('#results .result')
     if items:
         for item in items:
             link_tag = item.find('a', href=True)
-            if not link_tag:
-                continue
-            resolved_link = extract_onion_from_href(link_tag.get('href'), base_url)
+            resolved_link = None
+            link_title = None
+            if link_tag:
+                resolved_link = extract_onion_from_href(link_tag.get('href'), base_url)
+                link_title = link_tag.get_text(strip=True)
+            if not resolved_link:
+                data_href = item.get('data-href') or item.get('data-url') or item.get('data-link')
+                if data_href:
+                    resolved_link = extract_onion_from_href(data_href, base_url)
+            if not resolved_link:
+                for a in item.find_all('a', href=True):
+                    candidate = extract_onion_from_href(a.get('href'), base_url)
+                    if candidate and '.onion' in candidate:
+                        resolved_link = candidate
+                        if not link_title:
+                            link_title = a.get_text(strip=True)
+                        break
             if not resolved_link or '.onion' not in resolved_link:
                 continue
-            snippet_tag = item.find('p')
+            snippet_tag = item.find('p') or item.find('div', class_=re.compile(r'(snippet|desc|text)', re.IGNORECASE))
             results.append({
                 'Termo Pesquisado': term,
                 'Motor de Busca': 'Ahmia',
-                'Título': link_tag.get_text(strip=True) or resolved_link,
+                'Título': (link_title or resolved_link),
                 'URL': resolved_link,
                 'Snippet': snippet_tag.get_text(strip=True)[:200] if snippet_tag else "",
                 'Data': pd.Timestamp.now()
@@ -520,7 +690,7 @@ def search_engine(name, engine_config, term, proxies):
     current_url = swap_host_in_url(base_url, override) if override else base_url
     
     # Limite de segurança para evitar loops infinitos
-    MAX_PAGES = 3 
+    MAX_PAGES = 1 if name == 'Ahmia' else 3 
     pages_crawled = 0
     
     print(f"  > Pesquisando '{term}' no {name}...")
@@ -539,6 +709,10 @@ def search_engine(name, engine_config, term, proxies):
             if resp and resp.status_code == 200:
                 soup = BeautifulSoup(resp.text, 'html.parser')
                 record_engine_result(knowledge, name, urllib.parse.urlparse(current_url).netloc, True)
+                try:
+                    db_upsert_engine(name, urllib.parse.urlparse(current_url).netloc, success_inc=1)
+                except:
+                    pass
                 
                 page_results = []
                 
@@ -574,8 +748,23 @@ def search_engine(name, engine_config, term, proxies):
                             analysis = analyze_page_for_term(page_soup, term)
                             r.update(analysis)
                             r['Status'] = '200'
+                            try:
+                                db_upsert_link(url, r.get('Título') or "", name, term, r.get('Status'), r.get('Score'), r.get('Contextos'))
+                            except:
+                                pass
+                            try:
+                                extras = extract_onion_links_from_html(page_resp.text)
+                                for ex in extras:
+                                    ex_url = ex if urllib.parse.urlparse(ex).scheme else 'http://' + ex
+                                    db_upsert_link(ex_url, "", "discovered", term, "new", 0, "")
+                            except:
+                                pass
                         else:
                             r['Status'] = str(page_resp.status_code) if page_resp else 'error'
+                            try:
+                                db_upsert_link(url, r.get('Título') or "", name, term, r.get('Status'), 0, "")
+                            except:
+                                pass
                 except Exception as e:
                     if LOGGER:
                         LOGGER.exception("Falha ao analisar páginas da lista")
@@ -584,7 +773,7 @@ def search_engine(name, engine_config, term, proxies):
                 if name == 'Torch':
                     next_link = find_next_page_torch(soup, current_url)
                 elif name == 'Ahmia':
-                    next_link = find_next_page_ahmia(soup, current_url)
+                    next_link = None
                 else:
                     next_link = find_next_page(soup, current_url)
                 if next_link:
@@ -608,6 +797,10 @@ def search_engine(name, engine_config, term, proxies):
                 if LOGGER:
                     LOGGER.error(f"Falha resposta motor='{name}' status='{resp.status_code if resp else 'none'}'")
                 record_engine_result(knowledge, name, urllib.parse.urlparse(current_url).netloc, False)
+                try:
+                    db_upsert_engine(name, urllib.parse.urlparse(current_url).netloc, fail_inc=1)
+                except:
+                    pass
                 new_host = adapt_engine(name, engine_config, proxies, knowledge)
                 if new_host:
                     current_url = swap_host_in_url(base_url, new_host)
@@ -623,6 +816,10 @@ def search_engine(name, engine_config, term, proxies):
             if LOGGER:
                 LOGGER.error(f"Timeout motor='{name}'")
             record_engine_result(knowledge, name, urllib.parse.urlparse(current_url).netloc, False)
+            try:
+                db_upsert_engine(name, urllib.parse.urlparse(current_url).netloc, fail_inc=1)
+            except:
+                pass
             new_host = adapt_engine(name, engine_config, proxies, knowledge)
             if new_host:
                 current_url = swap_host_in_url(base_url, new_host)
@@ -637,6 +834,10 @@ def search_engine(name, engine_config, term, proxies):
             if LOGGER:
                 LOGGER.error(f"Conexão falhou motor='{name}'")
             record_engine_result(knowledge, name, urllib.parse.urlparse(current_url).netloc, False)
+            try:
+                db_upsert_engine(name, urllib.parse.urlparse(current_url).netloc, fail_inc=1)
+            except:
+                pass
             new_host = adapt_engine(name, engine_config, proxies, knowledge)
             if new_host:
                 current_url = swap_host_in_url(base_url, new_host)
@@ -657,45 +858,87 @@ def search_engine(name, engine_config, term, proxies):
 def enrich_results(results, proxies, max_fetch=ENRICH_FETCH_LIMIT):
     visited = set()
     fetched = 0
-    for r in results:
-        if fetched >= max_fetch:
-            break
+    tasks = []
+    def worker(r):
         url = r.get('URL')
         if not isinstance(url, str) or '.onion' not in url:
-            continue
+            return r, None
         if url in visited:
-            continue
+            return r, None
         if LOGGER:
             LOGGER.debug(f"Enriquecendo url='{url}'")
         resp = fetch_url(url, proxies, timeout=45, retries=1)
         visited.add(url)
-        fetched += 1
-        if resp and resp.status_code == 200:
-            soup = BeautifulSoup(resp.text, 'html.parser')
-            title = soup.title.get_text(strip=True) if soup.title else ""
-            meta = soup.find('meta', attrs={'name': 'description'})
-            meta_desc = meta.get('content', '').strip() if meta and meta.get('content') else ""
-            text_snippet = soup.get_text(separator=' ', strip=True)[:500]
-            if not r.get('Título'):
-                r['Título'] = title if title else r.get('Título', '')
-            if not r.get('Snippet'):
-                r['Snippet'] = meta_desc if meta_desc else text_snippet
-            r['Status'] = '200'
-            if LOGGER:
-                LOGGER.debug(f"Enriquecimento OK url='{url}'")
-        else:
-            r['Status'] = str(resp.status_code) if resp else 'error'
-            if LOGGER:
-                LOGGER.warning(f"Enriquecimento falhou url='{url}' status='{r['Status']}'")
+        return r, resp
+    pool_size = min(8, max_fetch)
+    with ThreadPoolExecutor(max_workers=pool_size) as ex:
+        for r in results:
+            if fetched >= max_fetch:
+                break
+            ex.submit(worker, r)
+            fetched += 1
+        for fut in as_completed(list(ex._futures)):
+            r, resp = fut.result()
+            if resp and resp.status_code == 200:
+                soup = BeautifulSoup(resp.text, 'html.parser')
+                title = soup.title.get_text(strip=True) if soup.title else ""
+                meta = soup.find('meta', attrs={'name': 'description'})
+                meta_desc = meta.get('content', '').strip() if meta and meta.get('content') else ""
+                text_snippet = soup.get_text(separator=' ', strip=True)[:500]
+                if not r.get('Título'):
+                    r['Título'] = title if title else r.get('Título', '')
+                if not r.get('Snippet'):
+                    r['Snippet'] = meta_desc if meta_desc else text_snippet
+                r['Status'] = '200'
+                if LOGGER:
+                    LOGGER.debug(f"Enriquecimento OK url='{r.get('URL')}'")
+            else:
+                r['Status'] = str(resp.status_code) if resp else 'error'
+                if LOGGER:
+                    LOGGER.warning(f"Enriquecimento falhou url='{r.get('URL')}' status='{r['Status']}'")
 
+def build_parser():
+    p = argparse.ArgumentParser()
+    p.add_argument("-q", "--query", dest="query", type=str, default=None)
+    p.add_argument("-t", "--threads", dest="threads", type=int, default=5)
+    p.add_argument("-o", "--output", dest="output", type=str, default=None)
+    p.add_argument("-p", "--port", dest="port", type=int, default=None)
+    return p
+def generate_summary(findings, output_path=None):
+    df = pd.DataFrame(findings) if findings else pd.DataFrame()
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    name = output_path or f"summary_{ts}.md"
+    try:
+        lines = []
+        lines.append(f"# Darkweb Summary {ts}")
+        if not df.empty:
+            lines.append(f"- Total links: {len(df)}")
+            if 'Motor de Busca' in df.columns:
+                counts = df['Motor de Busca'].value_counts()
+                for k, v in counts.items():
+                    lines.append(f"- {k}: {v}")
+        with open(name, "w", encoding="utf-8") as f:
+            f.write("\n".join(lines))
+    except:
+        pass
 def main():
     print(colored("=== Darkweb Multi-Engine Search Crawler ===", "magenta", attrs=['bold']))
+    parser = build_parser()
+    args = None
+    try:
+        args = parser.parse_args()
+    except SystemExit:
+        args = argparse.Namespace(query=None, threads=5, output=None, port=None)
     init_logger()
     if LOGGER:
         LOGGER.info("Início da varredura")
+    init_db()
     
     # 1. Configurar Tor
-    tor_port = get_tor_port()
+    override_port = None
+    if args and args.port:
+        override_port = int(args.port)
+    tor_port = override_port or get_tor_port()
     if not tor_port:
         print(colored("\n[CRÍTICO] O Tor não foi detectado (portas 9150/9050 fechadas).", "red"))
         if LOGGER:
@@ -720,16 +963,20 @@ def main():
             LOGGER.error("Verificação Tor falhou")
         return
 
-    # 2. Obter Termo de Pesquisa (Modo Input Direto)
-    if len(sys.argv) > 1:
-        # Se passado via linha de comando (ex: pelo Dashboard ou terminal)
-        termo_input = " ".join(sys.argv[1:])
+    # 2. Obter Termo
+    if args and args.query:
+        termo_input = args.query
+        try:
+            extra = get_top_keywords(termo_input, limit=5)
+            if extra:
+                termo_input = termo_input + " " + " ".join(extra)
+        except:
+            pass
         terms = [termo_input]
         print(colored(f"\n[INFO] Buscando por: {termo_input}", "cyan"))
         if LOGGER:
             LOGGER.info(f"Termo recebido via argumento='{termo_input}'")
     else:
-        # Modo Interativo
         print(colored("\n--- MODO DE PESQUISA MANUAL ---", "cyan", attrs=['bold']))
         termo_input = input(colored("Digite o termo que deseja procurar na Darkweb: ", "yellow")).strip()
         
@@ -757,12 +1004,21 @@ def main():
             time.sleep(random.uniform(2, 5)) 
             if LOGGER:
                 LOGGER.info(f"Motor concluído='{engine_name}' acumulado={len(all_findings)}")
+        try:
+            ext = aggregate_external_engines(str(term), proxies, max_workers=(args.threads if args else 5))
+            all_findings.extend(ext)
+            if LOGGER:
+                LOGGER.info(f"Agregador externo adicionou qtd={len(ext)}")
+        except:
+            if LOGGER:
+                LOGGER.warning("Agregador externo falhou")
 
     # 4. Relatório
     if all_findings:
         output_file = 'resultados_busca_darkweb.xlsx'
         try:
-            enrich_results(all_findings, proxies, ENRICH_FETCH_LIMIT)
+            target_fetch = ENRICH_FETCH_LIMIT if not args else max(1, args.threads)
+            enrich_results(all_findings, proxies, target_fetch)
         except Exception as e:
             print(colored(f"[AVISO] Enriquecimento falhou: {e}", "yellow"))
             if LOGGER:
@@ -794,6 +1050,7 @@ def main():
             print(colored(f"\n[SUCESSO] Relatório atualizado em: {output_file}", "green", attrs=['bold']))
             print(f"Total de Links Únicos (Acumulado): {len(df_results)}")
             print(f"Novos Links nesta rodada: {len(new_results)}")
+            generate_summary(all_findings, args.output if args else None)
             if LOGGER:
                 LOGGER.info(f"Relatório salvo='{output_file}' total={len(df_results)} novos={len(new_results)}")
         except PermissionError:

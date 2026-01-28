@@ -71,20 +71,22 @@ def read_log_tail(path, max_chars=8000):
         return data[-max_chars:]
     except:
         return ""
-def start_crawler(term, tor_port, mode="console"):
-    if not tor_port or not term:
+def start_crawler(term, tor_port, mode="console", manual_port=None):
+    if (not tor_port and not manual_port) or not term:
         return False, "Tor ou termo inválido"
     try:
         py = sys.executable or ("python" if os.name == 'nt' else "python3")
+        args = [py, "crawler.py", term] + ([str(manual_port)] if manual_port else [])
         if os.name == 'nt':
             if mode == "console":
-                subprocess.Popen([py, "crawler.py", term], creationflags=subprocess.CREATE_NEW_CONSOLE)
+                subprocess.Popen(args, creationflags=subprocess.CREATE_NEW_CONSOLE)
             else:
-                subprocess.Popen([py, "crawler.py", term], stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+                subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
         else:
             if mode == "console":
                 term_escaped = term.replace("'", "'\\''")
-                cmd = f"{py} crawler.py '{term_escaped}'; exec bash"
+                extra = f" {manual_port}" if manual_port else ""
+                cmd = f"{py} crawler.py '{term_escaped}'{extra}; exec bash"
                 terminal_cmds = [
                     ["x-terminal-emulator", "-e", "bash", "-lc", cmd],
                     ["gnome-terminal", "--", "bash", "-lc", cmd],
@@ -98,9 +100,9 @@ def start_crawler(term, tor_port, mode="console"):
                         launched = True
                         break
                 if not launched:
-                    subprocess.Popen([py, "crawler.py", term], stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+                    subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
             else:
-                subprocess.Popen([py, "crawler.py", term], stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+                subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
         return True, None
     except Exception as e:
         return False, str(e)
@@ -151,14 +153,16 @@ with st.sidebar:
     st.markdown("---")
     st.subheader("🚀 Execução do Crawler")
     search_term = st.text_input("Termo Alvo", placeholder="Ex: passaportes, cpf...")
+    manual_port_str = st.text_input("Porta SOCKS do Tor (opcional)", value=str(tor_port) if tor_port else "")
+    manual_port = int(manual_port_str) if manual_port_str.strip().isdigit() else None
     run_mode = st.radio("Modo de execução no Windows", ["Console externo", "Background"], index=0 if os.name == 'nt' else 0)
     if st.button("Iniciar"):
-        if not tor_port:
+        if not tor_port and not manual_port:
             st.error("Conecte ao Tor primeiro.")
         elif not search_term:
             st.warning("Digite um termo para buscar.")
         else:
-            ok, err = start_crawler(search_term, tor_port, mode="console" if run_mode == "Console externo" else "background")
+            ok, err = start_crawler(search_term, tor_port, mode="console" if run_mode == "Console externo" else "background", manual_port=manual_port)
             if ok:
                 st.success("Crawler iniciado")
             else:

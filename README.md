@@ -1,128 +1,81 @@
-# 🕵️ Darkweb Intelligence Monitor
+# Ozymandias — Darkweb Intelligence Crawler
 
-Ferramenta avançada de **Threat Intelligence** (OSINT) para monitoramento automatizado de ameaças e vazamento de dados na Darkweb (Rede Onion). O sistema realiza buscas profundas, detecta links, extrai snippets e gera relatórios consolidados em tempo real através de um dashboard interativo.
+Ozymandias é um projeto de OSINT focado na varredura, análise e agregação de resultados na rede Onion. Ele oferece um dashboard interativo e um modo CLI eficiente, combinando busca multi‑engine, extração robusta de links .onion, enriquecimento paralelo e persistência de dados.
 
-![Status](https://img.shields.io/badge/Status-Active-brightgreen)
-![Python](https://img.shields.io/badge/Python-3.10+-blue)
-![Tor](https://img.shields.io/badge/Network-Tor%20(Onion)-purple)
-![Kali Linux](https://img.shields.io/badge/Supported-Kali%20Linux-black)
-![Windows](https://img.shields.io/badge/Supported-Windows-blue)
+## Recursos
+- Busca multi‑engine com parsers dedicados e genéricos
+- Ahmia tratado como página única quando necessário
+- Extração robusta de destinos .onion em links com redirecionamento
+- Enriquecimento paralelo dos links e análise de termos (título/meta/corpo)
+- Adaptação de motores: aprende hosts .onion que respondem e troca quando um falha
+- Agregador externo com múltiplos buscadores adicionais em paralelo
+- Persistência em Excel (deduplicação por URL) e resumo Markdown opcional
+- Dashboard (Streamlit) com controle manual da porta SOCKS e visualização de dados/logs
 
----
+## Buscadores Internos
+- Ahmia, Torch, Haystak, OnionLand, TorDex, DarknetSearch, Tor66, OnionRealm, Excavator, TthSearch, Labyrinth, DeepSearch
 
-## 🚀 Funcionalidades Principais
+## Buscadores do Agregador Externo
+- Ahmia, OnionLand, Torgle, Amnesia, Kaizer, Anima, Tornado, TorNet, Torland, FindTor, Excavator, Onionway, Tor66, OSS, Torgol, The Deep Searches
 
-* **🕵️ Busca Multi-Engine**: Varre simultaneamente **12 motores de busca** da Darkweb para máxima cobertura.
-* **📑 Paginação Automática**: Percorre múltiplas páginas de resultados com heurísticas específicas por motor (Torch/Ahmia) e genéricas para demais.
-* **🤖 Análise Profunda de Termos**: Acessa cada link encontrado e avalia presença do termo no título, meta e corpo com normalização inteligente, gerando Ocorrencias, Score e Contextos.
-* **📡 Conexão Tor Híbrida**: Detecta e usa **Tor Browser** (Windows/9150) ou **Serviço Tor** (Linux/9050).
-* **📊 Dashboard Profissional**: Interface (Streamlit) com métricas, gráficos, filtros e leitura de logs.
-* **📝 Logging Completo**: Gera logs em `logs/varredura_YYYYmmdd_HHMMSS.log` com todo o fluxo da varredura.
-* **💾 Persistência de Dados**: Salva histórico em Excel, deduplicando por URL.
+## Arquitetura
+- crawler.py: busca principal, adaptação de motores, agregador externo, CLI
+- dashboard.py: interface Streamlit com abas, execução do crawler/probe
+- probe_engines.py: diagnóstico rápido dos buscadores e salvamento de HTML
+- setup_kali.sh: configuração em Kali/Linux (Tor, venv, dependências)
+- resultados_busca_darkweb.xlsx: relatório consolidado
+- engine_knowledge.json / knowledge.db: memória de hosts e base local de conhecimento
 
----
+## Instalação
+- Requisitos: Python 3.10+, Tor (Browser no Windows, serviço no Linux), pip
+- Windows:
+  - Instale o Tor Browser e mantenha‑o aberto (porta SOCKS 9150)
+  - pip install -r requirements.txt
+- Kali/Debian:
+  - chmod +x setup_kali.sh && ./setup_kali.sh
+  - source venv/bin/activate
 
-## 🔎 Motores de Busca Suportados
+## Execução do Dashboard
+- Windows/Kali:
+  - python -m streamlit run dashboard.py
+  - Barra lateral:
+    - Porta SOCKS do Tor (opcional): 9150 (Windows) ou 9050 (Linux)
+    - Termo e modo de execução
+  - Visualize dados, logs e sondagem de buscadores
 
-O crawler realiza varreduras nos seguintes indexadores da rede Onion:
+## Execução por CLI
+- Sintaxe:
+  - python crawler.py -q "termo" -t 8 -p 9150 -o resumo.md
+- Parâmetros:
+  - -q/--query: termo de busca
+  - -t/--threads: número de threads para enriquecimento
+  - -p/--port: porta SOCKS do Tor (9150 Windows / 9050 Linux)
+  - -o/--output: arquivo de resumo Markdown
+- Sem -q: entra em modo interativo via terminal
 
-| Motor | URL Onion (Truncada) | Tipo |
-| :--- | :--- | :--- |
-| **Ahmia** | `juhanurmi...onion` | Indexador robusto e limpo |
-| **Torch** | `xmh57jrk...onion` | Um dos mais antigos e vastos |
-| **Haystak** | `haystak5...onion` | Famoso por indexar bilhões de páginas |
-| **OnionLand** | `3bbad7f...onion` | Buscador rápido e popular |
-| **TorDex** | `tordexu7...onion` | Focado em mercados e fóruns |
-| **DarknetSearch** | `darkent7...onion` | Buscador geral |
-| **Tor66** | `tor66sew...onion` | Diretório e busca |
-| **OnionRealm** | `orealmvx...onion` | Motor de busca profundo |
-| **Excavator** | `2fd6cemt...onion` | Indexador de conteúdo oculto |
-| **TthSearch** | `tth4he7k...onion` | Busca textual simples |
-| **Labyrinth** | `labyrint...onion` | Busca categorizada |
-| **DeepSearch** | `dgwq7uzh...onion` | Buscador PHP clássico |
+## Saída e Logs
+- Excel: resultados_busca_darkweb.xlsx (deduplicação por URL)
+- Markdown: arquivo de resumo (se -o informado)
+- Logs: pasta logs/ (varredura_YYYYmmdd_HHMMSS.log)
+- HTML de sondagem: pasta debug_html/
 
----
+## Dicas e Solução de Problemas
+- Tor não detectado:
+  - Windows: mantenha o Tor Browser aberto (porta 9150)
+  - Linux: sudo service tor start (porta 9050)
+- Porta SOCKS:
+  - Defina manualmente no dashboard ou via -p no CLI
+- Cache do Streamlit:
+  - Remova ~/.streamlit/cache se necessário
 
-## 📂 Estrutura do Projeto
+## Ética e Legal
+- Uso somente para fins educacionais e de pesquisa de segurança
+- Siga as leis locais e políticas institucionais
+- Evite conteúdo ilegal; utilize com responsabilidade
 
-```bash
-Darkweb/
-├── crawler.py          # 🧠 CÉREBRO: Script de busca, paginação e conexão Tor
-├── dashboard.py        # 🖥️ VISUAL: Interface Streamlit com abas (v3.0)
-├── probe_engines.py    # 🛠️ DIAGNÓSTICO: Testa quais buscadores estão online
-├── setup_kali.sh       # 🐧 INSTALADOR: Script de configuração automática para Kali
-├── requirements.txt    # 📦 DEPENDÊNCIAS: Lista de bibliotecas Python
-└── resultados_busca_darkweb.xlsx # 📄 DADOS: Relatório gerado (criado após uso)
-```
+## O nome do projeto
+- O nome deste projeto é “Ozymandias”.
 
----
-
-## 💻 Instalação e Uso
-
-### 🐧 Opção 1: Linux (Kali/Debian)
-
-O projeto inclui um script de "instalação em um clique" que configura o Tor e o ambiente Python.
-
-1.  **Instalação**:
-    Abra o terminal na pasta do projeto e rode:
-    ```bash
-    chmod +x setup_kali.sh
-    ./setup_kali.sh
-    ```
-    *O script pedirá sua senha `sudo` para instalar o serviço Tor.*
-
-2.  **Execução**:
-    Ative o ambiente virtual e inicie o dashboard:
-    ```bash
-    source venv/bin/activate
-    python -m streamlit run dashboard.py
-    ```
-    *O navegador abrirá. Use a barra lateral para inserir um termo e iniciar a busca.*
-
-### 🪟 Opção 2: Windows
-
-1.  **Pré-requisito**: Baixe e instale o [Tor Browser](https://www.torproject.org/download/).
-    *   **IMPORTANTE**: Deixe o Tor Browser **ABERTO** enquanto usa a ferramenta (ele fornece a conexão na porta 9150).
-
-2.  **Instalação**:
-    Abra o terminal (CMD ou PowerShell) na pasta e instale as dependências:
-    ```powershell
-    pip install -r requirements.txt
-    ```
-
-3.  **Execução**:
-    ```powershell
-    python -m streamlit run dashboard.py
-    ```
-
----
-
-## 🖥️ Guia do Dashboard
-
-1.  **Status do Tor**: Verifique no menu lateral se aparece **"✅ TOR CONECTADO"**.
-    *   Se estiver vermelho, verifique se o Tor Browser (Windows) ou serviço Tor (Linux) está rodando.
-2. **Busca**:
-    * Digite um termo (ex: `passport`, `leak`, `cpf`).
-    * Escolha modo de execução (Console externo/Background no Windows).
-    * Clique em **Iniciar**.
-3. **Logs**:
-    * Aba **📝 Logs** mostra o arquivo atual com auto-refresh opcional.
-4. **Dados**:
-    * Aba **🔎 Dados** permite filtrar por palavra e exportar Excel.
-5. **Sondagem**:
-    * Aba **🧪 Buscadores** lista arquivos de teste em `debug_html/` e abre a pasta.
-
----
-
-## ⚠️ Aviso Legal e Ética
-
-Esta ferramenta foi desenvolvida estritamente para fins de **Educação**, **Pesquisa de Segurança** e **Threat Intelligence**.
-
-*   **NÃO** utilize para acessar conteúdo ilegal ou proibido.
-*   **NÃO** utilize para assediar, atacar ou coletar dados de terceiros sem autorização.
-*   O acesso à Darkweb pode expor seu computador a riscos. Use com responsabilidade.
-*   O autor não se responsabiliza pelo mau uso desta ferramenta.
-
----
-
-**Desenvolvido com Python 🐍 e Streamlit 🔴**
+## Trecho de “Ozymandias” (Percy Bysshe Shelley, 1818)
+> “My name is Ozymandias, King of Kings;  
+> Look on my Works, ye Mighty, and despair!”
