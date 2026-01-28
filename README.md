@@ -1,111 +1,95 @@
-# 🏛️ Ozymandias — Darkweb Intelligence Crawler
-
+# OZYMANDIAS // DARKWEB OSINT CONSOLE
 > “My name is Ozymandias, King of Kings; Look on my Works, ye Mighty, and despair!”
 
-Ozymandias é um projeto de OSINT focado em coleta resiliente na rede Onion. Combina busca multi‑engine, extração robusta de links .onion, enriquecimento paralelo e um dashboard em estilo HUD para operar e inspecionar dados em tempo real. Mantém memória local para aprender com endpoints que funcionam e se adaptar com o tempo.
+— STATUS: ONLINE  
+— INTERFACE: HUD  
+— DOMÍNIO: Onion Network  
 
-## 💡 Visão Geral
-- 🔍 Integra múltiplos buscadores e agrega resultados sem duplicação
-- 🧠 Analisa termos em título, meta e corpo para priorizar contexto útil
-- 🕸️ Extrai links .onion mesmo com ofuscação/redirecionamento
-- ⚙️ Aprende quais hosts .onion de cada motor estão estáveis e reusa
-- 📚 Persiste resultados para acompanhamento contínuo e revisões
+Ozymandias é um sistema de inteligência para coleta e análise na rede Onion. Opera múltiplos motores de busca, extrai links com resiliência, enriquece conteúdo, registra evidências e aprende com os endpoints que funcionam. Tudo guiado por um console HUD com telemetria, logs e dados consolidados.
 
-## 🚀 Recursos Principais
-<<<<<<< HEAD
-- 🔎 Busca multi‑engine com parsers dedicados e genéricos
-- 🧭 Modo de descoberta automática de novos buscadores .onion (validação de endpoints)
-- 🧠 Base de conhecimento local (knowledge.db) com sucesso/falha por motor/host
-- ⚡ Enriquecimento paralelo de conteúdo e ranking por relevância
-- 🌐 Agregador externo com motores adicionais quando disponíveis
-=======
-- 🔎 Busca multi‑engine (parsers dedicados e genéricos)
-- ⚡ Enriquecimento paralelo de conteúdo e análise de termos
-- 🌐 Agregador externo com buscadores adicionais
->>>>>>> a4b30e62b88d8374db43f07f4f1bd6cce15d699e
-- 📊 Persistência em Excel e resumo Markdown opcional
-- 🖥️ Dashboard HUD (Streamlit) com controle de porta SOCKS, abas de dados/logs e sondagem
-
-## ⚡ Instalação
-- Pré‑requisitos: Python 3.10+, Tor (Browser no Windows / serviço no Linux), pip
-- 🪟 Windows:
-  - Instale o Tor Browser e mantenha‑o aberto (porta SOCKS 9150)
+## BOOT/INIT
+- Requisitos: Python 3.10+, Tor (Browser no Windows / serviço no Linux), pip
+- Windows:
+  - Instale e mantenha Tor Browser aberto (SOCKS 9150)
   - pip install -r requirements.txt
-- 🐧 Kali/Debian:
+- Kali/Debian:
   - chmod +x setup_kali.sh && ./setup_kali.sh
   - source venv/bin/activate
 
-## 🖥️ Execução (Dashboard)
-- python -m streamlit run dashboard.py
-- Barra lateral:
-  - 🔌 Porta SOCKS do Tor (9150 Windows / 9050 Linux)
-  - 🔎 Termo de busca e seleção de modo
-  - 📈 Abas para HUD/Scanner/Dados/Logs/Buscadores
+## SUBSYSTEMS
+- Busca multi‑engine (parsers dedicados e genéricos)
+- Descoberta automática de buscadores .onion (-D)
+- Memória de hosts responsivos (knowledge.db)
+- Enriquecimento paralelo e ranking por relevância
+- Agregador externo de motores adicionais
+- Dashboard HUD (Streamlit) com abas e controle de SOCKS
+- Persistência em Excel e resumo Markdown
 
-## 🛠️ Execução (CLI)
-- Sintaxe rápida:
-  - python crawler.py -q "termo" -t 8 -p 9150 -o resumo.md
-- Parâmetros:
-  - 🔎 -q/--query: termo de busca
-  - ⚙️ -t/--threads: número de threads para enriquecimento
-  - 🔌 -p/--port: porta SOCKS do Tor (9150 Windows / 9050 Linux)
-  - 📝 -o/--output: arquivo de resumo Markdown
-  - 🔎 -D/--discover: ativa descoberta automática de novos buscadores
-- Sem -q: modo interativo via terminal
+## OPERATIONS
+- Dashboard:
+  - python -m streamlit run dashboard.py
+  - Ajuste Porta SOCKS (9150 Windows / 9050 Linux), termo de busca, threads e modo
+  - Visualize HUD, Scanner, Dados, Logs e Sondagem
+- CLI:
+  - python crawler.py -q "termo" -t 8 -p 9150 -o resumo.md -D
+  - Parâmetros:
+    - -q/--query: termo
+    - -t/--threads: threads de enriquecimento
+    - -p/--port: porta SOCKS
+    - -o/--output: arquivo de resumo (md)
+    - -D/--discover: habilita descoberta de novos motores
+  - Sem -q: modo interativo
 
-## 🧭 Modo Descoberta
-- Detecta candidatos de motores .onion a partir de fontes públicas
-- Extrai hosts .onion e testa padrões de URL de pesquisa por motor
-- Valida endpoints usando proxies socks5h e registra sucesso/falha
-- Atualiza knowledge.db para priorizar motores que comprovadamente funcionam
-- Integra candidatos válidos no ciclo de busca sem interromper a execução
+## DISCOVERY MODE
+- Coleta hosts .onion a partir de fontes públicas
+- Gera templates de busca e valida endpoints com socks5h
+- Atualiza knowledge.db com sucesso/falha por host/motor
+- Integra endpoints válidos no ciclo de busca sem interromper execução
 
-## 📦 Saídas e Dados
-- 📊 Excel: resultados_busca_darkweb.xlsx (deduplicação por URL)
-- 🧠 Base: knowledge.db (histórico de validação de motores/hosts)
-- 📝 Markdown: resumo opcional
-- 🧾 Logs: pasta logs/ (varredura_YYYYmmdd_HHMMSS.log)
-- 🧪 HTML de sondagem: pasta debug_html/
+## DATA CHANNELS
+- results: resultados_busca_darkweb.xlsx (deduplicação por URL)
+- knowledge: knowledge.db (engines, endpoints, keywords)
+- logs: logs/varredura_YYYYmmdd_HHMMSS.log
+- probe: debug_html/*.html
+- summaries: summary_*.md e/ou -o resumo.md
 
-<<<<<<< HEAD
-=======
-## 🧭 Buscadores Suportados
--  Ahmia, OnionLand, Torgle, Amnesia, Kaizer, Anima, Tornado, TorNet, Torland, FindTor, Excavator, Onionway, Tor66, OSS, Torgol, The Deep Searches
+## ARCHITECTURE
+- crawler.py: núcleo de busca, adaptação, agregador, CLI e descoberta
+- dashboard.py: HUD/Streamlit (execução, visualização e controle)
+- probe_engines.py: diagnóstico/sondagem e salvamento de HTML
+- setup_kali.sh: provisionamento (Tor, venv, deps)
+- engine_knowledge.json / knowledge.db: base de memória local
 
->>>>>>> a4b30e62b88d8374db43f07f4f1bd6cce15d699e
-## 🧱 Arquitetura
-- 🐍 crawler.py: busca principal, adaptação de motores, agregador externo, CLI e descoberta
-- 🖥️ dashboard.py: interface Streamlit (HUD, execução do crawler/probe, visualização)
-- 🔬 probe_engines.py: diagnóstico de buscadores e salvamento de HTML
-- 🐧 setup_kali.sh: configuração em Kali/Linux (Tor, venv, dependências)
-- 📊 resultados_busca_darkweb.xlsx: relatório consolidado
-- 🗃️ engine_knowledge.json / knowledge.db: memória de hosts e base local de conhecimento
+## HUD/TABS
+- 🧭 HUD: métricas, links por termo, por motor, por data
+- 🛰️ Scanner: tail de logs, auto‑refresh e abertura de pasta
+- 📂 Dados: filtro por palavra‑chave/motor, exportação Excel
+- 📝 Logs: seleção de arquivos, auto‑refresh, limpeza
+- 🧪 Buscadores: resultados de sondagem (debug_html)
+- 📄 Resumos: leitura/exports de summary_*.md e arquivos .md
 
-## 🧭 Buscadores (dinâmico)
-- Internos e agregados variam conforme disponibilidade na rede Onion
-- O projeto aprende e prioriza os que respondem com qualidade
-- Alguns exemplos: Ahmia, Torch (Omega), OnionLand, Tor66, Excavator, OSS, etc.
-- Observação: endpoints podem mudar; o modo descoberta ajuda a manter atual
+## PROTOCOLS
+- “Aqueça” o circuito Tor abrindo um .onion no navegador
+- Ajuste threads conforme estabilidade; evite concorrência agressiva
+- Use socks5h, timeouts razoáveis e pausas aleatórias entre páginas
+- Detecta Porta SOCKS automaticamente; aceita override manual
 
-## 🔐 Boas Práticas com Tor
-- “Aqueça” o circuito abrindo qualquer site .onion no navegador
-- Evite concorrência excessiva; ajuste threads conforme estabilidade da rede
-- Ajuste timeouts se notar lentidão ou rotas congestionadas
-- Use sempre proxies socks5h e mantenha portas corretas (9150/9050)
+## DIAGNOSTICS
+- Sondagem:
+  - python probe_engines.py
+  - Gera HTML em debug_html para inspeção de motores
+- Logs:
+  - Consulte varredura_*.log no HUD; use auto‑refresh
+- Desconexões:
+  - Ative -D para buscar endpoints alternativos e novos motores
 
-## 🧯 Solução de Problemas
-- Tor não detectado:
-  - 🪟 Windows: mantenha o Tor Browser aberto (porta 9150)
-  - 🐧 Linux: sudo service tor start (porta 9050)
-- Porta SOCKS:
-  - Defina manualmente no dashboard ou via -p no CLI
-- Streamlit:
-  - Limpe o cache do usuário em caso de inconsistência visual
-- Desconexões de buscadores:
-  - Ative -D/--discover para buscar endpoints alternativos e motores novos
-  - Utilize a sondagem para inspecionar HTML e validar acessos
+## FAILSAFE
+- Deduplicação por URL no relatório
+- Fallback por formulário para motores com variações de HTML
+- Registro persistente de links e endpoints (SQLite)
+- Continuidade mesmo com timeouts e falhas ocasionais
 
-## ⚖️ Ética e Legal
-- Uso apenas para fins educacionais e de pesquisa de segurança
-- Siga as leis locais e políticas institucionais
-- Evite conteúdo ilegal; utilize com responsabilidade
+## ETHICS
+- Uso educacional e pesquisa de segurança
+- Respeite leis e políticas da sua jurisdição
+- Evite conteúdo ilegal; opere com responsabilidade

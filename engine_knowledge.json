@@ -76,17 +76,17 @@
       "candidates": {
         "2fd6cemt4gmccflhm6imvdfvli3nf7zn6rfrwpsy7uhxrgbypvwf5fad.onion": {
           "success": 5,
-          "fail": 3,
-          "last": "2026-01-28T15:31:20.236798"
+          "fail": 4,
+          "last": "2026-01-28T15:42:51.230434"
         }
       }
     },
     "TthSearch": {
       "candidates": {
         "tth4he7kdfmfwq2k7yaj2ggjdva7rdpbch42q6xgoorbabjeklyfbmyd.onion": {
-          "success": 3,
+          "success": 4,
           "fail": 2,
-          "last": "2026-01-28T14:43:59.647423"
+          "last": "2026-01-28T15:42:59.645454"
         }
       }
     },
