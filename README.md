@@ -12,11 +12,17 @@ Ozymandias é um projeto de OSINT focado em coleta resiliente na rede Onion. Com
 - 📚 Persiste resultados para acompanhamento contínuo e revisões
 
 ## 🚀 Recursos Principais
+<<<<<<< HEAD
 - 🔎 Busca multi‑engine com parsers dedicados e genéricos
 - 🧭 Modo de descoberta automática de novos buscadores .onion (validação de endpoints)
 - 🧠 Base de conhecimento local (knowledge.db) com sucesso/falha por motor/host
 - ⚡ Enriquecimento paralelo de conteúdo e ranking por relevância
 - 🌐 Agregador externo com motores adicionais quando disponíveis
+=======
+- 🔎 Busca multi‑engine (parsers dedicados e genéricos)
+- ⚡ Enriquecimento paralelo de conteúdo e análise de termos
+- 🌐 Agregador externo com buscadores adicionais
+>>>>>>> a4b30e62b88d8374db43f07f4f1bd6cce15d699e
 - 📊 Persistência em Excel e resumo Markdown opcional
 - 🖥️ Dashboard HUD (Streamlit) com controle de porta SOCKS, abas de dados/logs e sondagem
 
@@ -61,6 +67,12 @@ Ozymandias é um projeto de OSINT focado em coleta resiliente na rede Onion. Com
 - 🧾 Logs: pasta logs/ (varredura_YYYYmmdd_HHMMSS.log)
 - 🧪 HTML de sondagem: pasta debug_html/
 
+<<<<<<< HEAD
+=======
+## 🧭 Buscadores Suportados
+-  Ahmia, OnionLand, Torgle, Amnesia, Kaizer, Anima, Tornado, TorNet, Torland, FindTor, Excavator, Onionway, Tor66, OSS, Torgol, The Deep Searches
+
+>>>>>>> a4b30e62b88d8374db43f07f4f1bd6cce15d699e
 ## 🧱 Arquitetura
 - 🐍 crawler.py: busca principal, adaptação de motores, agregador externo, CLI e descoberta
 - 🖥️ dashboard.py: interface Streamlit (HUD, execução do crawler/probe, visualização)
