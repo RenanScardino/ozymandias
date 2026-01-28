@@ -13,7 +13,6 @@ Ozymandias é um projeto de OSINT para explorar a rede Onion com eficiência, se
 
 ## 🚀 Recursos Principais
 - 🔎 Busca multi‑engine (parsers dedicados e genéricos)
-- 🧭 Ahmia com tratamento de paginação confiável (página única quando necessário)
 - ⚡ Enriquecimento paralelo de conteúdo e análise de termos
 - 🌐 Agregador externo com buscadores adicionais
 - 📊 Persistência em Excel e resumo Markdown opcional
@@ -52,8 +51,7 @@ Ozymandias é um projeto de OSINT para explorar a rede Onion com eficiência, se
 - 🧪 HTML de sondagem: pasta debug_html/
 
 ## 🧭 Buscadores Suportados
-- Internos: Ahmia, Torch, Haystak, OnionLand, TorDex, DarknetSearch, Tor66, OnionRealm, Excavator, TthSearch, Labyrinth, DeepSearch
-- Agregador: Ahmia, OnionLand, Torgle, Amnesia, Kaizer, Anima, Tornado, TorNet, Torland, FindTor, Excavator, Onionway, Tor66, OSS, Torgol, The Deep Searches
+-  Ahmia, OnionLand, Torgle, Amnesia, Kaizer, Anima, Tornado, TorNet, Torland, FindTor, Excavator, Onionway, Tor66, OSS, Torgol, The Deep Searches
 
 ## 🧱 Arquitetura
 - 🐍 crawler.py: busca principal, adaptação de motores, agregador externo, CLI
