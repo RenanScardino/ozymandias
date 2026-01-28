@@ -18,55 +18,45 @@ import argparse
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import sqlite3
 
+SESSIONS = {}
+
 # --- CONFIGURAÇÃO ---
 SEARCH_ENGINES = {
     'Ahmia': {
-        'url': 'http://juhanurmihxlp77nkq76byazcldy2hlmovfu2epvl5ankdibsot4csyd.onion/search/?q={query}',
-        'selector': 'li.result'
+        'url': 'http://juhanurmihxlp77nkq76byazcldy2hlmovfu2epvl5ankdibsot4csyd.onion/search/?q={query}'
     },
     'Torch': {
-        'url': 'http://xmh57jrknzkhv6y3ls3ubitzfqnkrwxhopf5aygthi7d6rplyvk3noyd.onion/cgi-bin/omega/omega?P={query}',
-        'selector': 'generic' # Parser genérico
+        'url': 'http://xmh57jrknzkhv6y3ls3ubitzfqnkrwxhopf5aygthi7d6rplyvk3noyd.onion/cgi-bin/omega/omega?P={query}'
     },
     'Haystak': {
-        'url': 'http://haystak5njsmn2hqkewecpaxetahtwhsbsa64jom2k22z5afxhnpxfid.onion/?q={query}',
-        'selector': 'generic'
+        'url': 'http://haystak5njsmn2hqkewecpaxetahtwhsbsa64jom2k22z5afxhnpxfid.onion/?q={query}'
     },
     'OnionLand': {
-        'url': 'http://3bbad7fauom4d6sgppalyqddsqbf5u5p56b5k5uk2zxsy3d6ey2jobad.onion/search?q={query}',
-        'selector': 'generic'
+        'url': 'http://3bbad7fauom4d6sgppalyqddsqbf5u5p56b5k5uk2zxsy3d6ey2jobad.onion/search?q={query}'
     },
     'TorDex': {
-        'url': 'http://tordexu73joywapk2txdr54jed4imqledpcvcuf75qsas2gwdgksvnyd.onion/search?q={query}',
-        'selector': 'generic'
+        'url': 'http://tordexu73joywapk2txdr54jed4imqledpcvcuf75qsas2gwdgksvnyd.onion/search?q={query}'
     },
     'DarknetSearch': {
-        'url': 'http://darkent74yfc3qe7vhd2ms53ynr3l5hbjz4on2x76e7odjiyrjlirvid.onion/search?q={query}',
-        'selector': 'generic'
+        'url': 'http://darkent74yfc3qe7vhd2ms53ynr3l5hbjz4on2x76e7odjiyrjlirvid.onion/search?q={query}'
     },
     'Tor66': {
-        'url': 'http://tor66sewebgixwhcqfnp5inzp5x5uohhdy3kvtnyfxc2e5mxiuh34iid.onion/search?q={query}',
-        'selector': 'generic'
+        'url': 'http://tor66sewebgixwhcqfnp5inzp5x5uohhdy3kvtnyfxc2e5mxiuh34iid.onion/search?q={query}'
     },
     'OnionRealm': {
-        'url': 'http://orealmvxooetglfeguv2vp65a3rig2baq2ljc7jxxs4hsqsrcemkxcad.onion/search?query={query}&action=search',
-        'selector': 'generic'
+        'url': 'http://orealmvxooetglfeguv2vp65a3rig2baq2ljc7jxxs4hsqsrcemkxcad.onion/search?query={query}&action=search'
     },
     'Excavator': {
-        'url': 'http://2fd6cemt4gmccflhm6imvdfvli3nf7zn6rfrwpsy7uhxrgbypvwf5fad.onion/search?query={query}',
-        'selector': 'generic'
+        'url': 'http://2fd6cemt4gmccflhm6imvdfvli3nf7zn6rfrwpsy7uhxrgbypvwf5fad.onion/search?query={query}'
     },
     'TthSearch': {
-        'url': 'http://tth4he7kdfmfwq2k7yaj2ggjdva7rdpbch42q6xgoorbabjeklyfbmyd.onion/search?query={query}',
-        'selector': 'generic'
+        'url': 'http://tth4he7kdfmfwq2k7yaj2ggjdva7rdpbch42q6xgoorbabjeklyfbmyd.onion/search?query={query}'
     },
     'Labyrinth': {
-        'url': 'http://labyrinthkh3uokhu2a5nwi4e6kedmbkxar3w6vgm2ipdb7ms3zdzlad.onion/search?query={query}&lang=english&sort-by=relevant&tab=all',
-        'selector': 'generic'
+        'url': 'http://labyrinthkh3uokhu2a5nwi4e6kedmbkxar3w6vgm2ipdb7ms3zdzlad.onion/search?query={query}&lang=english&sort-by=relevant&tab=all'
     },
     'DeepSearch': {
-        'url': 'http://dgwq7uzh5ro2f7p34begy4kmxue5gst7lk2spxda63zkrpuegtj4opyd.onion/search.php?q={query}',
-        'selector': 'generic'
+        'url': 'http://dgwq7uzh5ro2f7p34begy4kmxue5gst7lk2spxda63zkrpuegtj4opyd.onion/search.php?q={query}'
     }
 }
 DEFAULT_SEARCH_ENGINES = [
@@ -158,6 +148,65 @@ def extract_onion_hosts_from_html(html):
     for m in re.finditer(r'([a-z2-7]{16,56}\.onion)', html, re.IGNORECASE):
         hosts.add(m.group(1))
     return list(hosts)
+def guess_search_template(host):
+    bases = [
+        "http://{host}/search?q={query}",
+        "http://{host}/?q={query}",
+        "http://{host}/search?query={query}",
+        "http://{host}/cgi-bin/omega/omega?P={query}",
+        "http://{host}/search.php?q={query}",
+        "http://{host}/torgle/?query={query}",
+        "http://{host}/oss/index.php?search={query}"
+    ]
+    out = []
+    for b in bases:
+        out.append(b.replace("{host}", host))
+    return out
+def discover_new_engines(proxies, max_results=25):
+    sources = [
+        "dark web search engines onion list",
+        "onion search engine list",
+        "tor search engine list",
+        "darknet search engine index"
+    ]
+    discovered = []
+    try:
+        headers = {'User-Agent': random.choice(USER_AGENTS)}
+        for q in sources:
+            r = requests.get('https://duckduckgo.com/html/', params={'q': q}, headers=headers, timeout=40)
+            html = r.text if r and r.status_code == 200 else ""
+            hosts = extract_onion_hosts_from_html(html)
+            for h in hosts:
+                if h not in discovered:
+                    discovered.append(h)
+                if len(discovered) >= max_results:
+                    break
+            if len(discovered) >= max_results:
+                break
+    except:
+        pass
+    endpoints = []
+    for host in discovered:
+        templates = guess_search_template(host)
+        ok_endpoint = None
+        for ep in templates:
+            test = ep.format(query=urllib.parse.quote_plus("test"))
+            resp = fetch_url(test, proxies, timeout=40, retries=1)
+            if resp and resp.status_code == 200:
+                ok_endpoint = ep
+                try:
+                    db_upsert_endpoint(host, ep, "engine", ok=True)
+                except:
+                    pass
+                break
+            else:
+                try:
+                    db_upsert_endpoint(host, ep, "engine", ok=False)
+                except:
+                    pass
+        if ok_endpoint:
+            endpoints.append(ok_endpoint)
+    return endpoints
 def adapt_engine(name, engine_config, proxies, knowledge, max_candidates=8):
     query = f"{name} onion"
     try:
@@ -316,6 +365,15 @@ def get_headers():
         'Accept-Language': 'en-US,en;q=0.8,pt-BR;q=0.7',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
     }
+def get_session(proxies):
+    key = json.dumps(proxies, sort_keys=True)
+    sess = SESSIONS.get(key)
+    if sess:
+        return sess
+    s = requests.Session()
+    s.proxies = proxies
+    SESSIONS[key] = s
+    return s
 
 def normalize_onion_url(href, base_url):
     if not href:
@@ -364,7 +422,8 @@ def fetch_url(url, proxies, timeout=60, retries=2):
             headers = get_headers()
             if LOGGER:
                 LOGGER.debug(f"Requisição: {url} tentativa={attempt+1} timeout={timeout}")
-            resp = requests.get(url, headers=headers, proxies=proxies, timeout=timeout)
+            session = get_session(proxies)
+            resp = session.get(url, headers=headers, timeout=timeout)
             if resp.status_code == 200:
                 if LOGGER:
                     LOGGER.debug(f"Resposta 200: {url} tamanho={len(resp.text)}")
@@ -511,6 +570,71 @@ def aggregate_external_engines(term, proxies, max_workers=5):
         unique.append(r)
     return unique
 
+def perform_form_search(home_url, term, proxies, engine_name):
+    try:
+        if LOGGER:
+            LOGGER.info(f"FormFallback start motor='{engine_name}' home='{home_url}'")
+        resp = fetch_url(home_url, proxies, timeout=60, retries=1)
+        if not resp or resp.status_code != 200:
+            if LOGGER:
+                LOGGER.warning(f"FormFallback noresp motor='{engine_name}' status='{resp.status_code if resp else 'none'}'")
+            return []
+        soup = BeautifulSoup(resp.text, 'html.parser')
+        forms = soup.find_all('form')
+        if not forms:
+            if LOGGER:
+                LOGGER.info(f"FormFallback sem_forms motor='{engine_name}'")
+            return []
+        target_names = set(['q','query','search','s','term','keyword'])
+        chosen = None
+        for f in forms:
+            inputs = f.find_all('input')
+            names = set([i.get('name','').lower() for i in inputs if i.get('name')])
+            if names & target_names:
+                chosen = f
+                break
+        if not chosen:
+            chosen = forms[0]
+        data = {}
+        for i in chosen.find_all('input'):
+            name = i.get('name')
+            if not name:
+                continue
+            t = (i.get('type') or '').lower()
+            if name.lower() in target_names or t in ('text','search'):
+                data[name] = term
+            elif t in ('hidden','submit','radio','checkbox'):
+                val = i.get('value') or ''
+                if t in ('radio','checkbox'):
+                    if i.has_attr('checked'):
+                        data[name] = val
+                else:
+                    data[name] = val
+        action = chosen.get('action') or home_url
+        method = (chosen.get('method') or 'get').lower()
+        submit_url = urllib.parse.urljoin(home_url, action)
+        headers = get_headers()
+        r = None
+        if method == 'post':
+            r = requests.post(submit_url, data=data, headers=headers, proxies=proxies, timeout=60)
+        else:
+            r = requests.get(submit_url, params=data, headers=headers, proxies=proxies, timeout=60)
+        if not r or r.status_code != 200:
+            if LOGGER:
+                LOGGER.warning(f"FormFallback submit_fail motor='{engine_name}' url='{submit_url}' status='{r.status_code if r else 'none'}'")
+            return []
+        rsoup = BeautifulSoup(r.text, 'html.parser')
+        found = parse_generic(rsoup, term, submit_url)
+        for x in found:
+            x['Motor de Busca'] = engine_name
+        if LOGGER:
+            LOGGER.info(f"FormFallback ok motor='{engine_name}' url='{submit_url}' qtd={len(found)}")
+        return found
+    except:
+        if LOGGER:
+            LOGGER.exception(f"FormFallback error motor='{engine_name}'")
+        return []
+
 def find_next_page(soup, current_url):
     """Tenta encontrar o link para a próxima página de resultados."""
     link = soup.find('link', rel='next')
@@ -610,36 +734,6 @@ def find_next_page_torch(soup, current_url):
     next_url = urllib.parse.urlunparse((parsed.scheme, parsed.netloc, parsed.path, parsed.params, new_query, parsed.fragment))
     return next_url
 
-def find_next_page_ahmia(soup, current_url):
-    link = soup.find('link', rel='next')
-    if link and link.get('href'):
-        return link.get('href')
-    a_rel_next = soup.find('a', attrs={'rel': 'next'})
-    if a_rel_next and a_rel_next.get('href'):
-        return a_rel_next.get('href')
-    for a in soup.find_all('a', href=True):
-        txt = a.get_text(strip=True).lower()
-        if re.search(r'(next|próxima|proxima|>>|›|»)', txt, re.IGNORECASE):
-            return a['href']
-    parsed = urllib.parse.urlparse(current_url)
-    qs = urllib.parse.parse_qs(parsed.query)
-    def _get_int(d, k, default):
-        try:
-            return int(d.get(k, [default])[0])
-        except:
-            return default
-    start = _get_int(qs, 'start', -1)
-    page = _get_int(qs, 'page', -1)
-    next_qs = {k: v[:] for k, v in qs.items()}
-    if start >= 0:
-        next_qs['start'] = [str(start + 10)]
-    elif page >= 0:
-        next_qs['page'] = [str(page + 1)]
-    else:
-        next_qs['page'] = ['2']
-    new_query = urllib.parse.urlencode(next_qs, doseq=True)
-    next_url = urllib.parse.urlunparse((parsed.scheme, parsed.netloc, parsed.path, parsed.params, new_query, parsed.fragment))
-    return next_url
 def parse_ahmia(soup, term, base_url):
     results = []
     items = soup.select('li.result') or soup.select('li[class*=\"result\"]') or soup.select('div.result') or soup.select('article.result') or soup.select('#results li') or soup.select('#results .result')
@@ -725,6 +819,17 @@ def search_engine(name, engine_config, term, proxies):
                     for res in generic_results:
                         res['Motor de Busca'] = name
                     page_results.extend(generic_results)
+                if pages_crawled == 0 and len(page_results) == 0:
+                    try:
+                        parsed = urllib.parse.urlparse(current_url)
+                        home_url = urllib.parse.urlunparse((parsed.scheme, parsed.netloc, '/', '', '', ''))
+                        print(colored("    [?] Fallback por formulário na página inicial", "yellow"))
+                        if LOGGER:
+                            LOGGER.info(f"Fallback formulário motor='{name}' home='{home_url}'")
+                        form_results = perform_form_search(home_url, term, proxies, name)
+                        page_results.extend(form_results or [])
+                    except:
+                        pass
                     
                 results.extend(page_results)
                 print(colored(f"    -> {len(page_results)} resultados nesta página.", "cyan"))
@@ -903,6 +1008,7 @@ def build_parser():
     p.add_argument("-t", "--threads", dest="threads", type=int, default=5)
     p.add_argument("-o", "--output", dest="output", type=str, default=None)
     p.add_argument("-p", "--port", dest="port", type=int, default=None)
+    p.add_argument("-D", "--discover", dest="discover", action="store_true", default=False)
     return p
 def generate_summary(findings, output_path=None):
     df = pd.DataFrame(findings) if findings else pd.DataFrame()
@@ -959,10 +1065,34 @@ def main():
         LOGGER.info(f"Tor detectado porta={tor_port}")
 
     if not check_tor_connection(proxies):
+        print(colored("[AVISO] Não foi possível confirmar a conexão Tor. Continuando mesmo assim.", "yellow"))
         if LOGGER:
-            LOGGER.error("Verificação Tor falhou")
-        return
+            LOGGER.warning("Verificação Tor falhou, prosseguindo com proxies configurados")
 
+    # 1.1 Descoberta automática de novos buscadores (opcional)
+    try:
+        if args and getattr(args, "discover", False):
+            print(colored("[INFO] Descobrindo novos buscadores automaticamente...", "cyan"))
+            if LOGGER:
+                LOGGER.info("Iniciando descoberta de buscadores")
+            new_eps = discover_new_engines(proxies)
+            if new_eps:
+                added = 0
+                for ep in new_eps:
+                    if ep not in DEFAULT_SEARCH_ENGINES:
+                        DEFAULT_SEARCH_ENGINES.append(ep)
+                        added += 1
+                print(colored(f"[INFO] {added} novos endpoints adicionados ao agregador.", "green"))
+                if LOGGER:
+                    LOGGER.info(f"Descoberta adicionou qtd={added}")
+            else:
+                print(colored("[INFO] Nenhum novo buscador válido encontrado no momento.", "yellow"))
+                if LOGGER:
+                    LOGGER.info("Descoberta sem resultados")
+    except Exception as e:
+        if LOGGER:
+            LOGGER.exception("Falha na descoberta automática")
+ 
     # 2. Obter Termo
     if args and args.query:
         termo_input = args.query
